@@ -377,6 +377,10 @@ mod tests {
         assert_eq!(first_manager.get_token().await.unwrap(), "token-a");
         assert_eq!(first_requests.lock().len(), 1);
 
+        let cached: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&cache_path).unwrap()).unwrap();
+        assert_eq!(cached["client_id"], "client-a");
+        assert!(cached.get("client_secret").is_none(), "{cached}");
+
         let second_manager = TokenManager::new_with_cache_path(
             "client-b".to_string(),
             "secret-b".to_string(),
