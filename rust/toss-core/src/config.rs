@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -6,11 +7,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, TossError};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub client_id: String,
     pub client_secret: String,
     pub account_seq: Option<u64>,
+}
+
+impl fmt::Debug for AppConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AppConfig")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[redacted]")
+            .field("account_seq", &self.account_seq)
+            .finish()
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -87,7 +98,22 @@ fn default_config_path(config_path: Option<&Path>) -> Result<PathBuf> {
 mod tests {
     use std::fs;
 
-    use super::{load, read_file_config, save_account_seq};
+    use super::{load, read_file_config, save_account_seq, AppConfig};
+
+    #[test]
+    fn debug_redacts_client_secret() {
+        let config = AppConfig {
+            client_id: "client-file".to_string(),
+            client_secret: "super-secret".to_string(),
+            account_seq: Some(9),
+        };
+        let debug = format!("{config:?}");
+
+        assert!(!debug.contains("super-secret"), "{debug}");
+        assert!(debug.contains("client_id: \"client-file\""), "{debug}");
+        assert!(debug.contains("client_secret: \"[redacted]\""), "{debug}");
+        assert!(debug.contains("account_seq: Some(9)"), "{debug}");
+    }
 
     #[test]
     fn allows_missing_default_config_file() {
