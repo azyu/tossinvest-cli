@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,13 +10,25 @@ use tokio::sync::Mutex;
 use crate::error::{Result, TossError};
 use crate::transport::{Header, HttpMethod, HttpRequest, Transport};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TokenManager<T: Transport> {
     client_id: String,
     client_secret: String,
     cache_path: PathBuf,
     transport: T,
     state: Arc<Mutex<TokenState>>,
+}
+
+impl<T: Transport> fmt::Debug for TokenManager<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TokenManager")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[redacted]")
+            .field("cache_path", &self.cache_path)
+            .field("transport", &"<hidden>")
+            .field("state", &"<hidden>")
+            .finish()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -83,10 +96,7 @@ impl<T: Transport> TokenManager<T> {
     }
 
     async fn fetch_token(&self) -> Result<(String, DateTime<Utc>)> {
-        let body = format!(
-            "grant_type=client_credentials&client_id={}&client_secret={}",
-            self.client_id, self.client_secret
-        );
+        let body = form_urlencoded_body(&self.client_id, &self.client_secret);
         let response = self
             .transport
             .send(HttpRequest {
@@ -168,6 +178,37 @@ fn header_value(headers: &[Header], name: &str) -> Option<String> {
         .map(|header| header.value.clone())
 }
 
+fn form_urlencoded_body(client_id: &str, client_secret: &str) -> String {
+    let mut body = String::with_capacity(
+        "grant_type=client_credentials&client_id=&client_secret=".len()
+            + client_id.len() * 3
+            + client_secret.len() * 3,
+    );
+    body.push_str("grant_type=client_credentials&client_id=");
+    push_form_encoded(&mut body, client_id);
+    body.push_str("&client_secret=");
+    push_form_encoded(&mut body, client_secret);
+    body
+}
+
+fn push_form_encoded(out: &mut String, value: &str) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'*' => {
+                out.push(byte as char)
+            }
+            b' ' => out.push('+'),
+            _ => {
+                out.push('%');
+                out.push(HEX[(byte >> 4) as usize] as char);
+                out.push(HEX[(byte & 0x0f) as usize] as char);
+            }
+        }
+    }
+}
+
 #[cfg(unix)]
 fn set_file_mode(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -192,7 +233,7 @@ mod tests {
     use super::TokenManager;
     use crate::transport::{Header, HttpMethod, HttpRequest, HttpResponse, Transport};
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct RecordingTransport {
         requests: Arc<Mutex<Vec<HttpRequest>>>,
         response: HttpResponse,
@@ -204,6 +245,55 @@ mod tests {
             self.requests.lock().push(request);
             Ok(self.response.clone())
         }
+    }
+
+    #[tokio::test]
+    async fn encodes_form_delimiters_and_whitespace_in_credentials() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests: requests.clone(),
+            response: HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+            },
+        };
+        let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
+        let manager = TokenManager::new_with_cache_path(
+            "client id &=".to_string(),
+            "sec ret+two=3&4".to_string(),
+            cache_path,
+            transport,
+        );
+
+        let token = manager.get_token().await.unwrap();
+        assert_eq!(token, "token-1");
+
+        let captured = requests.lock();
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].body.as_deref(), Some(b"grant_type=client_credentials&client_id=client+id+%26%3D&client_secret=sec+ret%2Btwo%3D3%264".as_slice()));
+    }
+
+    #[test]
+    fn debug_redacts_client_secret() {
+        let manager = TokenManager::new_with_cache_path(
+            "client-9".to_string(),
+            "super-secret".to_string(),
+            tempfile::tempdir().unwrap().path().join("token.json"),
+            RecordingTransport {
+                requests: Arc::new(Mutex::new(Vec::new())),
+                response: HttpResponse {
+                    status: 200,
+                    headers: Vec::new(),
+                    body: Vec::new(),
+                },
+            },
+        );
+
+        let debug = format!("{manager:?}");
+
+        assert!(!debug.contains("super-secret"), "{debug}");
+        assert!(debug.contains("client_secret: \"[redacted]\""), "{debug}");
     }
 
     #[tokio::test]
