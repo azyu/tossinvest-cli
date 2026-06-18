@@ -46,6 +46,7 @@ struct TokenResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedToken {
+    client_id: String,
     access_token: String,
     expired_at: String,
 }
@@ -137,6 +138,9 @@ impl<T: Transport> TokenManager<T> {
     fn load_cached_token(&self) -> Option<(String, DateTime<Utc>)> {
         let data = fs::read_to_string(&self.cache_path).ok()?;
         let cached: CachedToken = serde_json::from_str(&data).ok()?;
+        if cached.client_id != self.client_id {
+            return None;
+        }
         let expires_at = DateTime::parse_from_rfc3339(&cached.expired_at)
             .ok()?
             .with_timezone(&Utc);
@@ -153,6 +157,7 @@ impl<T: Transport> TokenManager<T> {
             return;
         }
         let cached = CachedToken {
+            client_id: self.client_id.clone(),
             access_token: token.to_string(),
             expired_at: expires_at.to_rfc3339(),
         };
@@ -348,5 +353,45 @@ mod tests {
         assert_eq!(manager.get_token().await.unwrap(), "token-2");
         assert_eq!(manager.get_token().await.unwrap(), "token-2");
         assert_eq!(requests.lock().len(), 1);
+    }
+    #[tokio::test]
+    async fn does_not_reuse_cached_token_for_different_client_id() {
+        let first_requests = Arc::new(Mutex::new(Vec::new()));
+        let second_requests = Arc::new(Mutex::new(Vec::new()));
+        let tempdir = tempfile::tempdir().unwrap();
+        let cache_path = tempdir.path().join("token.json");
+
+        let first_manager = TokenManager::new_with_cache_path(
+            "client-a".to_string(),
+            "secret-a".to_string(),
+            cache_path.clone(),
+            RecordingTransport {
+                requests: first_requests.clone(),
+                response: HttpResponse {
+                    status: 200,
+                    headers: Vec::new(),
+                    body: br#"{"access_token":"token-a","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                },
+            },
+        );
+        assert_eq!(first_manager.get_token().await.unwrap(), "token-a");
+        assert_eq!(first_requests.lock().len(), 1);
+
+        let second_manager = TokenManager::new_with_cache_path(
+            "client-b".to_string(),
+            "secret-b".to_string(),
+            cache_path,
+            RecordingTransport {
+                requests: second_requests.clone(),
+                response: HttpResponse {
+                    status: 200,
+                    headers: Vec::new(),
+                    body: br#"{"access_token":"token-b","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                },
+            },
+        );
+
+        assert_eq!(second_manager.get_token().await.unwrap(), "token-b");
+        assert_eq!(second_requests.lock().len(), 1);
     }
 }
