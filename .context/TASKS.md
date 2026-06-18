@@ -17,7 +17,7 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 
 | Status | Task | Context / Verification |
 |--------|------|------------------------|
-| [ ] | Workspace and config foundation | Create Rust workspace and `toss-core` config/error modules. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-core config::tests`. |
+| [x] | Workspace and config foundation | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core config::tests` → 5 passed. Commits `51751c9`, `553bee0`. |
 | [ ] | Transport and auth token manager | Add mockable transport and OAuth token cache. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-core auth::tests`. |
 | [ ] | Authenticated client and endpoint wrappers | Add `TossClient` and read-only endpoint wrappers. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-core`. |
 | [ ] | CLI parser and output runtime | Add `toss-cli`, clap parser, JSON envelopes, config smoke test. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-cli`. |
