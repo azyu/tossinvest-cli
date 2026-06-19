@@ -71,11 +71,13 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
                 cli::QuoteCommand::Orderbook(arg) => {
-                    market_data::orderbook(&client, &arg.symbol).await?
+                    market_data::orderbook_json(&client, &arg.symbol).await?
                 }
-                cli::QuoteCommand::Trades(arg) => market_data::trades(&client, &arg.symbol).await?,
+                cli::QuoteCommand::Trades(arg) => {
+                    market_data::trades_json(&client, &arg.symbol).await?
+                }
                 cli::QuoteCommand::Limits(arg) => {
-                    market_data::price_limits(&client, &arg.symbol).await?
+                    market_data::price_limits_json(&client, &arg.symbol).await?
                 }
             };
             write_output(output_format, command_name, value, writer)

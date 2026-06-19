@@ -123,12 +123,13 @@ mod tests {
 
     use super::{
         candles, candles_json, orderbook, orderbook_json, price_limits, price_limits_json, prices,
-        prices_json, trades, trades_json,
+        prices_json, trades, trades_json, PriceLimitResponse, Trade,
     };
     use crate::auth::TokenManager;
     use crate::client::TossClient;
     use crate::config::AppConfig;
     use crate::models::common::{Currency, MarketCountry};
+    use crate::models::market_data::Candle;
     use crate::transport::{HttpRequest, HttpResponse, Transport};
 
     #[derive(Clone)]
@@ -244,6 +245,36 @@ mod tests {
                 .0,
             "XX"
         );
+    }
+
+    #[tokio::test]
+    async fn deserializes_missing_timestamps_as_none() {
+        let trade: Trade = serde_json::from_value(serde_json::json!({
+            "price": "72000",
+            "volume": "120",
+            "currency": "KRW"
+        }))
+        .unwrap();
+        assert_eq!(trade.timestamp, None);
+
+        let limit: PriceLimitResponse = serde_json::from_value(serde_json::json!({
+            "upperLimitPrice": "93000",
+            "lowerLimitPrice": "50400",
+            "currency": "KRW"
+        }))
+        .unwrap();
+        assert_eq!(limit.timestamp, None);
+
+        let candle: Candle = serde_json::from_value(serde_json::json!({
+            "openPrice": "71600",
+            "highPrice": "72300",
+            "lowPrice": "71500",
+            "closePrice": "72000",
+            "volume": "3521000",
+            "currency": "KRW"
+        }))
+        .unwrap();
+        assert_eq!(candle.timestamp, None);
     }
 
     #[tokio::test]
