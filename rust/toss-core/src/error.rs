@@ -6,6 +6,8 @@ pub type Result<T, E = TossError> = std::result::Result<T, E>;
 pub enum TossError {
     #[error("config error: {0}")]
     Config(String),
+    #[error("validation error: {0}")]
+    Validation(String),
     #[error("auth error: {0}")]
     Auth(String),
     #[error("api error: {message}")]

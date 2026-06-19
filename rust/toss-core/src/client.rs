@@ -66,7 +66,7 @@ impl<T: Transport> TossClient<T> {
     ) -> Result<Value> {
         let account_seq = if account_required {
             Some(self.config.account_seq.ok_or_else(|| {
-                TossError::Config(
+                TossError::Validation(
                     "account sequence is required; run `toss account list` then `toss account use <accountSeq>`"
                         .to_string(),
                 )
@@ -251,11 +251,16 @@ mod tests {
             token_manager,
             transport,
         );
-
         let err = client
             .get_json("/api/v1/holdings", Vec::new(), true)
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("account sequence is required"));
+
+        assert!(err.to_string().starts_with("validation error:"), "{err}");
+        assert!(err.to_string().contains("toss account list"), "{err}");
+        assert!(
+            err.to_string().contains("toss account use <accountSeq>"),
+            "{err}"
+        );
     }
 }

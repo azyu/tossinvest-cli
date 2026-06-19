@@ -1,7 +1,7 @@
 use std::fs;
 use std::process::Command as ProcessCommand;
 
-use clap::Parser;
+use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
     CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OutputFormat, QuoteCommand,
     StockCommand,
@@ -15,6 +15,35 @@ fn parses_json_price_command() {
         Command::Price(args) => assert_eq!(args.symbol, "005930"),
         other => panic!("unexpected command: {other:?}"),
     }
+}
+
+#[test]
+fn rejects_invalid_chart_candle_interval() {
+    let err =
+        Cli::try_parse_from(["toss", "chart", "candles", "AAPL", "--interval", "2h"]).unwrap_err();
+
+    assert_eq!(err.kind(), ErrorKind::InvalidValue);
+}
+
+#[test]
+fn emits_json_validation_error_for_missing_price_symbol() {
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args(["--json", "price"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "{:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["command"], "price");
+    assert_eq!(envelope["error"]["kind"], "validation");
 }
 
 #[test]
@@ -101,7 +130,7 @@ fn parses_chart_candles_command() {
         Command::Chart(args) => match args.command {
             ChartCommand::Candles(args) => {
                 assert_eq!(args.symbol, "AAPL");
-                assert_eq!(args.interval, "1d");
+                assert_eq!(args.interval.to_string(), "1d");
                 assert_eq!(args.from.as_deref(), Some("2026-01-01"));
             }
         },

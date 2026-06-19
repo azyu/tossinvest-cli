@@ -114,11 +114,28 @@ pub enum ChartCommand {
     Candles(CandlesArgs),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CandleInterval {
+    #[value(name = "1m")]
+    Min1,
+    #[value(name = "1d")]
+    Day1,
+}
+
+impl std::fmt::Display for CandleInterval {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Min1 => "1m",
+            Self::Day1 => "1d",
+        })
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct CandlesArgs {
     pub symbol: String,
     #[arg(long)]
-    pub interval: String,
+    pub interval: CandleInterval,
     #[arg(long)]
     pub from: Option<String>,
     #[arg(long)]

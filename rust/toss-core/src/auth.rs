@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -164,9 +165,7 @@ impl<T: Transport> TokenManager<T> {
         let Ok(payload) = serde_json::to_vec_pretty(&cached) else {
             return;
         };
-        if fs::write(&self.cache_path, payload).is_ok() {
-            let _ = set_file_mode(&self.cache_path);
-        }
+        let _ = write_cached_token(&self.cache_path, &payload);
     }
 }
 
@@ -215,17 +214,22 @@ fn push_form_encoded(out: &mut String, value: &str) {
 }
 
 #[cfg(unix)]
-fn set_file_mode(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
 
-    let mut permissions = fs::metadata(path)?.permissions();
-    permissions.set_mode(0o600);
-    fs::set_permissions(path, permissions)
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(payload)
 }
 
 #[cfg(not(unix))]
-fn set_file_mode(_path: &Path) -> std::io::Result<()> {
-    Ok(())
+fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+    fs::write(path, payload)
 }
 
 #[cfg(test)]
@@ -337,6 +341,35 @@ mod tests {
                     .as_slice()
             )
         );
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn creates_token_cache_with_owner_only_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests,
+            response: HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-3","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let cache_path = tempdir.path().join("token.json");
+        let manager = TokenManager::new_with_cache_path(
+            "client-3".to_string(),
+            "secret-3".to_string(),
+            cache_path.clone(),
+            transport,
+        );
+
+        assert_eq!(manager.get_token().await.unwrap(), "token-3");
+
+        let mode = std::fs::metadata(&cache_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[tokio::test]

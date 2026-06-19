@@ -86,7 +86,7 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
                 cli::ChartCommand::Candles(args) => {
                     let mut query = vec![
                         ("symbol".to_string(), args.symbol),
-                        ("interval".to_string(), args.interval),
+                        ("interval".to_string(), args.interval.to_string()),
                     ];
                     if let Some(from) = args.from {
                         query.push(("from".to_string(), from));
@@ -229,6 +229,14 @@ fn classify_error(err: &anyhow::Error) -> ErrorOutput {
                     request_id: None,
                 };
             }
+            TossError::Validation(message) => {
+                return ErrorOutput {
+                    kind: "validation",
+                    code: None,
+                    message: message.clone(),
+                    request_id: None,
+                };
+            }
             TossError::Auth(message) => {
                 return ErrorOutput {
                     kind: "auth",
@@ -270,7 +278,15 @@ fn classify_error(err: &anyhow::Error) -> ErrorOutput {
                     request_id: None,
                 };
             }
-            TossError::Io(_) | TossError::Yaml(_) | TossError::Json(_) | TossError::Http(_) => {}
+            TossError::Io(_) | TossError::Yaml(_) => {
+                return ErrorOutput {
+                    kind: "config",
+                    code: None,
+                    message: err.to_string(),
+                    request_id: None,
+                };
+            }
+            TossError::Json(_) | TossError::Http(_) => {}
         }
     }
 
@@ -279,6 +295,43 @@ fn classify_error(err: &anyhow::Error) -> ErrorOutput {
         code: None,
         message: err.to_string(),
         request_id: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io;
+
+    use super::write_json_error;
+    use toss_core::TossError;
+    use toss_core::config;
+
+    fn error_kind(err: anyhow::Error) -> String {
+        let mut buffer = Vec::new();
+        write_json_error(&mut buffer, "config", &err).unwrap();
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        envelope["error"]["kind"].as_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn classifies_io_config_failures_as_config() {
+        let err = anyhow::Error::new(TossError::Io(io::Error::new(
+            io::ErrorKind::NotFound,
+            "missing config",
+        )));
+
+        assert_eq!(error_kind(err), "config");
+    }
+
+    #[test]
+    fn classifies_yaml_config_failures_as_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        fs::write(&path, "client_id: [1, 2").unwrap();
+        let err = config::load(Some(&path), None).unwrap_err();
+
+        assert_eq!(error_kind(anyhow::Error::new(err)), "config");
     }
 }
 
