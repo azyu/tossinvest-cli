@@ -5,9 +5,9 @@
 
 ## Current Priority
 
-Build Phase 1: read-only Toss Securities Open API CLI.
+Build Phase 2: typed wrapper/library core.
 
-Phase 1 must produce a working binary with config loading, OAuth token request plumbing, read-only market/account commands, stable JSON envelopes, and tests that verify request construction without real credentials.
+Phase 2 must produce typed wrapper/library core, stable JSON compatibility shims, and tests that verify typed deserialization without real credentials.
 
 ## Execution Mode
 
@@ -28,7 +28,7 @@ File-based coordination.
 - Never print `client_secret` or access tokens in normal command output.
 - JSON mode must use stable success/error envelopes for automation.
 - Network-dependent behavior must be testable through a mock transport.
-- Verification claims require fresh command output.
+| [ ] | Phase 2 typed wrapper/library core | In progress. Task 1 and Task 2 are complete; tasks 3+ remain. |
 
 ## CLI UX Direction
 

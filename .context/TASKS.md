@@ -28,7 +28,7 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 
 | Status | Task | Context |
 |--------|------|---------|
-| [ ] | Phase 2 typed wrapper/library core | Deferred until Phase 1 read-only CLI works. |
+| [ ] | Phase 2 typed wrapper/library core | In progress. Task 1 and Task 2 are complete; tasks 3+ remain. |
 | [ ] | Phase 3 order-capable CLI | Deferred until typed core, dry-run, confirmation, idempotency, and order error tests are designed and implemented. |
 
 ## Completed

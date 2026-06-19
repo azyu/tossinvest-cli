@@ -8,7 +8,7 @@ Toss Securities Open API wrapper CLI. Rust workspace planned with a small CLI cr
 
 ## Current State
 
-Phase 1 read-only CLI is implemented and final-reviewed. Next active phase is Phase 2: typed wrapper/library core.
+Phase 1 read-only CLI is implemented and final-reviewed. Phase 2 typed wrapper/library core is now active.
 
 - Spec: `docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md`
 - Phase 1 plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
@@ -20,7 +20,6 @@ Phase 1 read-only CLI is implemented and final-reviewed. Next active phase is Ph
 1. Read-only investment terminal.
 2. Typed wrapper/library core.
 3. Real order-capable CLI.
-
 ## Planned Tech Stack
 
 - Rust edition 2024
