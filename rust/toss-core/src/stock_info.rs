@@ -2,9 +2,10 @@ use serde_json::Value;
 
 use crate::Result;
 use crate::client::TossClient;
+use crate::models::stock_info::{StockInfo, StockWarning};
 use crate::transport::Transport;
 
-pub async fn stocks<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Value> {
+pub async fn stocks_json<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Value> {
     client
         .get_json(
             "/api/v1/stocks",
@@ -14,9 +15,32 @@ pub async fn stocks<T: Transport>(client: &TossClient<T>, symbols: &str) -> Resu
         .await
 }
 
-pub async fn warnings<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
+pub async fn warnings_json<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
     client
         .get_json(
+            &format!("/api/v1/stocks/{symbol}/warnings"),
+            Vec::new(),
+            false,
+        )
+        .await
+}
+
+pub async fn stocks<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Vec<StockInfo>> {
+    client
+        .get_typed(
+            "/api/v1/stocks",
+            vec![("symbols".to_string(), symbols.to_string())],
+            false,
+        )
+        .await
+}
+
+pub async fn warnings<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+) -> Result<Vec<StockWarning>> {
+    client
+        .get_typed(
             &format!("/api/v1/stocks/{symbol}/warnings"),
             Vec::new(),
             false,
@@ -30,11 +54,13 @@ mod tests {
 
     use async_trait::async_trait;
     use parking_lot::Mutex;
+    use serde_json::json;
 
-    use super::{stocks, warnings};
+    use super::{stocks, stocks_json, warnings, warnings_json};
     use crate::auth::TokenManager;
     use crate::client::TossClient;
     use crate::config::AppConfig;
+    use crate::models::stock_info::{StockInfo, StockWarning};
     use crate::transport::{HttpRequest, HttpResponse, Transport};
 
     #[derive(Clone)]
@@ -90,18 +116,18 @@ mod tests {
             HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
+                body: br#"{"result":[]}"#.to_vec(),
             },
             HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
+                body: br#"{"result":[]}"#.to_vec(),
             },
         ]));
         let client = client(requests.clone(), responses);
 
-        stocks(&client, "AAPL,MSFT").await.unwrap();
-        warnings(&client, "AAPL").await.unwrap();
+        stocks_json(&client, "AAPL,MSFT").await.unwrap();
+        warnings_json(&client, "AAPL").await.unwrap();
 
         let captured = requests.lock();
         assert_eq!(captured.len(), 3);
@@ -112,5 +138,70 @@ mod tests {
         );
         assert_eq!(captured[2].path, "/api/v1/stocks/AAPL/warnings");
         assert!(captured[2].query.is_empty());
+    }
+
+    #[tokio::test]
+    async fn deserializes_unknown_stock_market_and_currency() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: json!({
+                    "result": [
+                        {
+                            "symbol": "AAPL",
+                            "name": "Apple",
+                            "englishName": "APPLE INC",
+                            "isinCode": "US0378331005",
+                            "market": "MYSTERY_MARKET",
+                            "securityType": "STOCK",
+                            "isCommonShare": true,
+                            "status": "ACTIVE",
+                            "currency": "XCU",
+                            "listDate": "1980-12-12",
+                            "delistDate": null,
+                            "sharesOutstanding": "1000000000",
+                            "leverageFactor": null,
+                            "koreanMarketDetail": null
+                        }
+                    ]
+                })
+                .to_string()
+                .into_bytes(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: json!({
+                    "result": [
+                        {
+                            "warningType": "UNKNOWN_WARNING",
+                            "exchange": "KRX",
+                            "startDate": "2026-03-20",
+                            "endDate": null
+                        }
+                    ]
+                })
+                .to_string()
+                .into_bytes(),
+            },
+        ]));
+        let client = client(requests, responses);
+
+        let stocks: Vec<StockInfo> = stocks(&client, "AAPL").await.unwrap();
+        let warnings: Vec<StockWarning> = warnings(&client, "AAPL").await.unwrap();
+
+        assert_eq!(stocks.len(), 1);
+        assert_eq!(stocks[0].market.0, "MYSTERY_MARKET");
+        assert_eq!(stocks[0].currency.0, "XCU");
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].warning_type.0, "UNKNOWN_WARNING");
     }
 }

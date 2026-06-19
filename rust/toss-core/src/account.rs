@@ -2,10 +2,17 @@ use serde_json::Value;
 
 use crate::Result;
 use crate::client::TossClient;
+use crate::models::account::Account;
 use crate::transport::Transport;
 
-pub async fn list<T: Transport>(client: &TossClient<T>) -> Result<Value> {
+pub async fn list_json<T: Transport>(client: &TossClient<T>) -> Result<Value> {
     client.get_json("/api/v1/accounts", Vec::new(), false).await
+}
+
+pub async fn list<T: Transport>(client: &TossClient<T>) -> Result<Vec<Account>> {
+    client
+        .get_typed("/api/v1/accounts", Vec::new(), false)
+        .await
 }
 
 #[cfg(test)]
@@ -15,10 +22,11 @@ mod tests {
     use async_trait::async_trait;
     use parking_lot::Mutex;
 
-    use super::list;
+    use super::{list, list_json};
     use crate::auth::TokenManager;
     use crate::client::TossClient;
     use crate::config::AppConfig;
+    use crate::models::account::Account;
     use crate::transport::{HttpRequest, HttpResponse, Transport};
 
     #[derive(Clone)]
@@ -74,16 +82,43 @@ mod tests {
             HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
+                body: br#"{"result":[]}"#.to_vec(),
             },
         ]));
         let client = client(requests.clone(), responses);
 
-        list(&client).await.unwrap();
+        list_json(&client).await.unwrap();
 
         let captured = requests.lock();
         assert_eq!(captured.len(), 2);
         assert_eq!(captured[1].path, "/api/v1/accounts");
         assert!(captured[1].query.is_empty());
+    }
+
+    #[tokio::test]
+    async fn deserializes_unknown_account_type() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":[{"accountNo":"12345678901","accountSeq":1,"accountType":"MARGIN_PLUS"}]}"#
+                    .to_vec(),
+            },
+        ]));
+        let client = client(requests, responses);
+
+        let accounts: Vec<Account> = list(&client).await.unwrap();
+
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].account_no, "12345678901");
+        assert_eq!(accounts[0].account_seq, 1);
+        assert_eq!(accounts[0].account_type.0, "MARGIN_PLUS");
     }
 }
