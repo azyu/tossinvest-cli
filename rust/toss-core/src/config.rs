@@ -44,9 +44,9 @@ pub fn load(config_path: Option<&Path>, account_override: Option<&str>) -> Resul
         .or(file.client_secret)
         .unwrap_or_default();
     let account_seq = if let Some(raw) = account_override {
-        Some(parse_account_seq(raw)?)
+        Some(parse_account_seq(raw, TossError::Validation)?)
     } else if let Ok(raw) = env::var("TOSSINVEST_ACCOUNT_SEQ") {
-        Some(parse_account_seq(&raw)?)
+        Some(parse_account_seq(&raw, TossError::Config)?)
     } else {
         file.account_seq
     };
@@ -70,9 +70,9 @@ pub fn save_account_seq(config_path: Option<&Path>, account_seq: u64) -> Result<
     Ok(path)
 }
 
-fn parse_account_seq(raw: &str) -> Result<u64> {
+fn parse_account_seq(raw: &str, kind: fn(String) -> TossError) -> Result<u64> {
     raw.parse::<u64>()
-        .map_err(|_| TossError::Config(format!("invalid account sequence: {raw}")))
+        .map_err(|_| kind(format!("invalid account sequence: {raw}")))
 }
 
 fn read_file_config(path: &Path, allow_missing: bool) -> Result<FileConfig> {
@@ -99,6 +99,7 @@ mod tests {
     use std::fs;
 
     use super::{AppConfig, load, read_file_config, save_account_seq};
+    use crate::error::TossError;
 
     #[test]
     fn debug_redacts_client_secret() {
@@ -150,6 +151,23 @@ account_seq: 7
         assert_eq!(config.client_id, "client-file");
         assert_eq!(config.client_secret, "secret-file");
         assert_eq!(config.account_seq, Some(9));
+    }
+
+    #[test]
+    fn rejects_invalid_cli_account_override_as_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        fs::write(
+            &path,
+            r#"
+client_id: "client-file"
+client_secret: "secret-file"
+"#,
+        )
+        .unwrap();
+
+        let err = load(Some(&path), Some("abc")).unwrap_err();
+        assert!(matches!(err, TossError::Validation(ref message) if message.contains("invalid account sequence: abc")), "{err}");
     }
 
     #[test]

@@ -41,8 +41,23 @@ fn emits_json_validation_error(args: &[OsString], kind: ErrorKind) -> bool {
 }
 
 fn json_requested(args: &[OsString]) -> bool {
-    args.iter()
-        .any(|arg| arg.as_os_str() == OsStr::new("--json"))
+    let mut skip_value = false;
+    for arg in args.iter().skip(1) {
+        let value = arg.to_string_lossy();
+        if skip_value {
+            skip_value = false;
+            if value == "json" {
+                return true;
+            }
+            continue;
+        }
+        match value.as_ref() {
+            "--json" | "--output=json" => return true,
+            "--output" => skip_value = true,
+            _ => {}
+        }
+    }
+    false
 }
 
 fn command_name(args: &[OsString]) -> String {

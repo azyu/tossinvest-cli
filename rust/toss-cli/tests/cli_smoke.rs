@@ -7,6 +7,21 @@ use toss_cli::cli::{
     StockCommand,
 };
 
+fn assert_json_parse_error(output: std::process::Output, command: &str) {
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "{:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["command"], command);
+    assert_eq!(envelope["error"]["kind"], "validation");
+}
+
 #[test]
 fn parses_json_price_command() {
     let cli = Cli::parse_from(["toss", "--json", "price", "005930"]);
@@ -32,18 +47,32 @@ fn emits_json_validation_error_for_missing_price_symbol() {
         .output()
         .unwrap();
 
-    assert!(!output.status.success());
-    assert!(
-        output.stderr.is_empty(),
-        "{:?}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert_json_parse_error(output, "price");
+}
 
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(envelope["ok"], false);
-    assert_eq!(envelope["command"], "price");
-    assert_eq!(envelope["error"]["kind"], "validation");
+#[test]
+fn emits_json_validation_error_for_missing_price_symbol_with_output_selector() {
+    for args in [
+        &["--output", "json", "price"][..],
+        &["--output=json", "price"][..],
+    ] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+            .args(args)
+            .output()
+            .unwrap();
+
+        assert_json_parse_error(output, "price");
+    }
+}
+
+#[test]
+fn emits_json_validation_error_for_invalid_account_override() {
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args(["--output", "json", "--account", "abc", "config"])
+        .output()
+        .unwrap();
+
+    assert_json_parse_error(output, "config");
 }
 
 #[test]

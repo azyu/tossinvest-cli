@@ -215,8 +215,8 @@ fn push_form_encoded(out: &mut String, value: &str) {
 
 #[cfg(unix)]
 fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
-    use std::fs::OpenOptions;
-    use std::os::unix::fs::OpenOptionsExt;
+    use std::fs::{self, OpenOptions};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
     let mut file = OpenOptions::new()
         .create(true)
@@ -224,7 +224,8 @@ fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
         .write(true)
         .mode(0o600)
         .open(path)?;
-    file.write_all(payload)
+    file.write_all(payload)?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(not(unix))]
@@ -234,6 +235,7 @@ fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::sync::Arc;
 
     use async_trait::async_trait;
@@ -371,6 +373,48 @@ mod tests {
         let mode = std::fs::metadata(&cache_path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rewrites_existing_token_cache_with_owner_only_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests,
+            response: HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-4","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let cache_path = tempdir.path().join("token.json");
+        fs::write(
+            &cache_path,
+            r#"{
+  "client_id": "client-4",
+  "access_token": "stale-token",
+  "expired_at": "2020-01-01T00:00:00Z"
+}"#,
+        )
+        .unwrap();
+        fs::set_permissions(&cache_path, fs::Permissions::from_mode(0o644)).unwrap();
+        let manager = TokenManager::new_with_cache_path(
+            "client-4".to_string(),
+            "secret-4".to_string(),
+            cache_path.clone(),
+            transport,
+        );
+
+        assert_eq!(manager.get_token().await.unwrap(), "token-4");
+
+        let mode = fs::metadata(&cache_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        let contents = fs::read_to_string(&cache_path).unwrap();
+        assert!(contents.contains("\"access_token\": \"token-4\""), "{contents}");
+    }
+
 
     #[tokio::test]
     async fn reuses_cached_token_in_memory() {
