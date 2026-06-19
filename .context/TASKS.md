@@ -22,7 +22,7 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 | [x] | Authenticated client and endpoint wrappers | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core` → 17 passed. Commit `ca0de61`. |
 | [x] | CLI parser and output runtime | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-cli` → 4 passed. Commit `18cf072`. |
 | [x] | Wire read-only commands | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml` → 23 passed. Commit `a2e5097`. |
-| [x] | Documentation and final verification | README added; verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml` → 23 passed, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config`. |
+| [x] | Documentation and final verification | README added; verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml` → 35 passed, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config`. |
 
 ## Blocked / Deferred
 
