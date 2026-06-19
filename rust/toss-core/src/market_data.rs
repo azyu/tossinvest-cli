@@ -122,8 +122,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        candles, candles_json, orderbook, orderbook_json, price_limits, price_limits_json, prices,
-        prices_json, trades, trades_json, PriceLimitResponse, Trade,
+        PriceLimitResponse, Trade, candles, candles_json, orderbook, orderbook_json, price_limits,
+        price_limits_json, prices, prices_json, trades, trades_json,
     };
     use crate::auth::TokenManager;
     use crate::client::TossClient;
