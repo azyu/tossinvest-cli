@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Fmt, Test, Build (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Format
+        run: cargo fmt --manifest-path rust/Cargo.toml --all --check
+
+      - name: Test
+        run: cargo test --manifest-path rust/Cargo.toml
+
+      - name: Build
+        env:
+          TOSS_BUILD_COMMIT: ${{ github.sha }}
+          TOSS_BUILD_TIME: ${{ github.event.head_commit.timestamp || '' }}
+        run: cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss --release
