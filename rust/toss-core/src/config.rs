@@ -167,7 +167,10 @@ client_secret: "secret-file"
         .unwrap();
 
         let err = load(Some(&path), Some("abc")).unwrap_err();
-        assert!(matches!(err, TossError::Validation(ref message) if message.contains("invalid account sequence: abc")), "{err}");
+        assert!(
+            matches!(err, TossError::Validation(ref message) if message.contains("invalid account sequence: abc")),
+            "{err}"
+        );
     }
 
     #[test]
