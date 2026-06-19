@@ -321,9 +321,9 @@ fn validate_order_create_size(args: &cli::OrderCreateArgs, side: &str) -> Result
     let has_qty = args.qty.is_some();
     let has_amount = args.amount.is_some();
     if has_qty == has_amount {
-        return Err(TossError::Validation(
-            format!("order {side} requires exactly one of --qty or --amount"),
-        )
+        return Err(TossError::Validation(format!(
+            "order {side} requires exactly one of --qty or --amount"
+        ))
         .into());
     }
     Ok(())
@@ -752,7 +752,14 @@ mod tests {
             captured[1].query,
             vec![("status".to_string(), "OPEN".to_string())]
         );
-        assert_eq!(captured[1].headers.iter().find(|header| header.name == "X-Tossinvest-Account").map(|header| header.value.as_str()), Some("42"));
+        assert_eq!(
+            captured[1]
+                .headers
+                .iter()
+                .find(|header| header.name == "X-Tossinvest-Account")
+                .map(|header| header.value.as_str()),
+            Some("42")
+        );
     }
 
     #[tokio::test]
@@ -792,7 +799,14 @@ mod tests {
         assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
         assert_eq!(captured[1].path, "/api/v1/orders/order-123");
         assert!(captured[1].query.is_empty());
-        assert_eq!(captured[1].headers.iter().find(|header| header.name == "X-Tossinvest-Account").map(|header| header.value.as_str()), Some("42"));
+        assert_eq!(
+            captured[1]
+                .headers
+                .iter()
+                .find(|header| header.name == "X-Tossinvest-Account")
+                .map(|header| header.value.as_str()),
+            Some("42")
+        );
     }
 
     #[tokio::test]
@@ -812,10 +826,7 @@ mod tests {
             .await
             .unwrap_err();
 
-            assert!(
-                err.to_string().contains("exactly one"),
-                "{side:?}: {err}"
-            );
+            assert!(err.to_string().contains("exactly one"), "{side:?}: {err}");
             assert!(err.to_string().contains("--qty"), "{side:?}: {err}");
             assert!(err.to_string().contains("--amount"), "{side:?}: {err}");
             assert!(requests.lock().unwrap().is_empty(), "{side:?}: {err}");
@@ -839,10 +850,7 @@ mod tests {
             .await
             .unwrap_err();
 
-            assert!(
-                err.to_string().contains("exactly one"),
-                "{side:?}: {err}"
-            );
+            assert!(err.to_string().contains("exactly one"), "{side:?}: {err}");
             assert!(err.to_string().contains("--qty"), "{side:?}: {err}");
             assert!(err.to_string().contains("--amount"), "{side:?}: {err}");
             assert!(requests.lock().unwrap().is_empty(), "{side:?}: {err}");
@@ -851,7 +859,6 @@ mod tests {
 
     #[test]
     fn build_order_create_request_omits_confirm_high_value_order_when_flag_is_off() {
-
         let request = super::build_order_create_request(
             &cli::OrderCreateArgs {
                 symbol: "AAPL".to_string(),
@@ -986,7 +993,6 @@ mod tests {
             })
         );
     }
-
 
     #[tokio::test]
     async fn order_buying_power_dispatches_through_wrapper() {

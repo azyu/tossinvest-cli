@@ -51,7 +51,10 @@ pub async fn list<T: Transport>(
         .await
 }
 
-pub async fn show<T: Transport>(client: &TossClient<T>, order_id: &str) -> Result<OrderHistoryOrder> {
+pub async fn show<T: Transport>(
+    client: &TossClient<T>,
+    order_id: &str,
+) -> Result<OrderHistoryOrder> {
     client
         .get_typed(&format!("/api/v1/orders/{order_id}"), Vec::new(), true)
         .await
@@ -104,13 +107,13 @@ mod tests {
     use parking_lot::Mutex;
     use serde_json::{Value, json};
 
-    use crate::auth::TokenManager;
-    use crate::client::TossClient;
-    use crate::config::AppConfig;
     use super::{
         build_cancel_dry_run, build_create_dry_run, build_modify_dry_run, cancel, create, list,
         modify, show,
     };
+    use crate::auth::TokenManager;
+    use crate::client::TossClient;
+    use crate::config::AppConfig;
     use crate::models::order::{
         OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
         OrderSide, OrderType, TimeInForce,

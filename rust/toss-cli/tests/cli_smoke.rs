@@ -3,8 +3,8 @@ use std::process::Command as ProcessCommand;
 
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
-    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand,
-    OrderHistoryStatus, OrderType, OutputFormat, QuoteCommand, StockCommand,
+    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand, OrderHistoryStatus,
+    OrderType, OutputFormat, QuoteCommand, StockCommand,
 };
 
 fn assert_json_parse_error(output: std::process::Output, command: &str) {
