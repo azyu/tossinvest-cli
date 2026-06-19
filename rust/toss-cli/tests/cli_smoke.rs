@@ -158,6 +158,35 @@ fn parses_order_mutating_commands_with_safety_flags() {
     let cli = Cli::parse_from([
         "toss",
         "order",
+        "buy",
+        "--symbol",
+        "AAPL",
+        "--amount",
+        "100",
+        "--type",
+        "market",
+        "--dry-run",
+    ]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Buy(args) => {
+                assert_eq!(args.symbol, "AAPL");
+                assert_eq!(args.qty.as_deref(), None);
+                assert_eq!(args.amount.as_deref(), Some("100"));
+                assert_eq!(args.order_type, OrderType::Market);
+                assert_eq!(args.price.as_deref(), None);
+                assert!(args.dry_run);
+                assert!(!args.confirm);
+                assert!(!args.confirm_high_value_order);
+            }
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
         "sell",
         "--symbol",
         "AAPL",
