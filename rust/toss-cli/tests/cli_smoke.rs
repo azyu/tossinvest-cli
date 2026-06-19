@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command as ProcessCommand;
 
 use clap::Parser;
-use toss_cli::cli::{Cli, Command, OutputFormat, QuoteCommand};
+use toss_cli::cli::{CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OutputFormat, QuoteCommand, StockCommand};
 
 #[test]
 fn parses_json_price_command() {
@@ -73,4 +73,43 @@ fn runs_account_use_command_through_binary() {
     assert!(contents.contains("account_seq: 42"));
     assert!(contents.contains("client_id: client-abc"));
     assert!(contents.contains("client_secret: secret-xyz"));
+}
+
+#[test]
+fn parses_chart_candles_command() {
+    let cli = Cli::parse_from(["toss", "chart", "candles", "AAPL", "--interval", "1d", "--from", "2026-01-01"]);
+    match cli.command {
+        Command::Chart(args) => match args.command {
+            ChartCommand::Candles(args) => {
+                assert_eq!(args.symbol, "AAPL");
+                assert_eq!(args.interval, "1d");
+                assert_eq!(args.from.as_deref(), Some("2026-01-01"));
+            }
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_stock_and_market_commands() {
+    let stock = Cli::parse_from(["toss", "stock", "search", "--symbols", "005930,AAPL"]);
+    match stock.command {
+        Command::Stock(args) => match args.command {
+            StockCommand::Search(args) => assert_eq!(args.symbols, "005930,AAPL"),
+            other => panic!("unexpected stock command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let market = Cli::parse_from(["toss", "market", "calendar", "kr"]);
+    match market.command {
+        Command::Market(args) => match args.command {
+            MarketCommand::Calendar(args) => match args.command {
+                CalendarCommand::Kr => {}
+                other => panic!("unexpected calendar command: {other:?}"),
+            },
+            other => panic!("unexpected market command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
 }

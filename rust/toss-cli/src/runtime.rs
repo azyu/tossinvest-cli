@@ -4,6 +4,8 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::json;
 use toss_core::config::{self, AppConfig};
+use toss_core::{account, asset, market_data, market_info, stock_info};
+use toss_core::client::TossClient;
 use toss_core::TossError;
 
 use crate::cli::{self, OutputFormat};
@@ -47,6 +49,67 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
 
     match command {
         cli::Command::Config => run_config(output_format, command_name, &app_config, writer),
+        cli::Command::Auth(args) => match args.command {
+            cli::AuthCommand::Token => {
+                let client = TossClient::new(app_config)?;
+                client.check_token().await?;
+                write_output(output_format, command_name, json!({ "token_check": "ok" }), writer)
+            }
+        },
+        cli::Command::Price(args) => {
+            let client = TossClient::new(app_config)?;
+            let symbols = args.symbols.as_deref().unwrap_or(&args.symbol);
+            let value = market_data::prices(&client, symbols).await?;
+            write_output(output_format, command_name, value, writer)
+        }
+        cli::Command::Quote(args) => {
+            let client = TossClient::new(app_config)?;
+            let value = match args.command {
+                cli::QuoteCommand::Orderbook(arg) => market_data::orderbook(&client, &arg.symbol).await?,
+                cli::QuoteCommand::Trades(arg) => market_data::trades(&client, &arg.symbol).await?,
+                cli::QuoteCommand::Limits(arg) => market_data::price_limits(&client, &arg.symbol).await?,
+            };
+            write_output(output_format, command_name, value, writer)
+        }
+        cli::Command::Chart(args) => {
+            let client = TossClient::new(app_config)?;
+            let value = match args.command {
+                cli::ChartCommand::Candles(args) => {
+                    let mut query = vec![
+                        ("symbol".to_string(), args.symbol),
+                        ("interval".to_string(), args.interval),
+                    ];
+                    if let Some(from) = args.from {
+                        query.push(("from".to_string(), from));
+                    }
+                    if let Some(to) = args.to {
+                        query.push(("to".to_string(), to));
+                    }
+                    market_data::candles(&client, query).await?
+                }
+            };
+            write_output(output_format, command_name, value, writer)
+        }
+        cli::Command::Stock(args) => {
+            let client = TossClient::new(app_config)?;
+            let value = match args.command {
+                cli::StockCommand::Get(arg) => stock_info::stocks(&client, &arg.symbol).await?,
+                cli::StockCommand::Warnings(arg) => stock_info::warnings(&client, &arg.symbol).await?,
+                cli::StockCommand::Search(arg) => stock_info::stocks(&client, &arg.symbols).await?,
+            };
+            write_output(output_format, command_name, value, writer)
+        }
+        cli::Command::Market(args) => {
+            let client = TossClient::new(app_config)?;
+            let value = match args.command {
+                cli::MarketCommand::ExchangeRate => market_info::exchange_rate(&client).await?,
+                cli::MarketCommand::Calendar(args) => match args.command {
+                    cli::CalendarCommand::Kr => market_info::kr_calendar(&client).await?,
+                    cli::CalendarCommand::Us => market_info::us_calendar(&client).await?,
+                },
+            };
+            write_output(output_format, command_name, value, writer)
+        }
         cli::Command::Account(args) => match args.command {
             cli::AccountCommand::Use(args) => {
                 let path = config::save_account_seq(config.as_deref(), args.account_seq)?;
@@ -57,9 +120,17 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
                     writer,
                 )
             }
-            cli::AccountCommand::List => Err(anyhow::anyhow!("network commands are implemented in Task 5")),
+            cli::AccountCommand::List => {
+                let client = TossClient::new(app_config)?;
+                let value = account::list(&client).await?;
+                write_output(output_format, command_name, value, writer)
+            }
         },
-        _ => Err(anyhow::anyhow!("network commands are implemented in Task 5")),
+        cli::Command::Holdings => {
+            let client = TossClient::new(app_config)?;
+            let value = asset::holdings(&client).await?;
+            write_output(output_format, command_name, value, writer)
+        }
     }
 }
 
