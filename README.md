@@ -18,6 +18,12 @@
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install azyu/tap/toss
+```
+
 ### From source
 
 Requires Rust 1.93+.

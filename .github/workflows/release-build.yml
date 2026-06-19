@@ -164,3 +164,80 @@ jobs:
           fi
 
           gh release edit "${TAG}" --draft=false --prerelease=false --repo "${GITHUB_REPOSITORY}"
+
+  homebrew-tap:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+    steps:
+      - name: Skip when Homebrew tap token is not configured
+        if: ${{ env.HOMEBREW_TAP_TOKEN == '' }}
+        shell: bash
+        run: echo "HOMEBREW_TAP_TOKEN is not configured; skipping Homebrew tap update."
+
+      - name: Checkout homebrew-tap
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: azyu/homebrew-tap
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Render formula from release assets
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+
+          gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" --json assets > release.json
+
+          ruby <<'RUBY'
+          require "json"
+
+          version = ENV.fetch("VERSION").sub(/\Av/, "")
+          release = JSON.parse(File.read("release.json"))
+          assets = release.fetch("assets").each_with_object({}) do |asset, index|
+            index[asset.fetch("name")] = asset.fetch("digest").sub(/\Asha256:/, "")
+          end
+
+          replacements = {
+            "{{VERSION}}" => version,
+            "{{MACOS_ARM64_SHA256}}" => assets.fetch("toss_#{version}_macos_arm64.tar.gz"),
+            "{{LINUX_AMD64_SHA256}}" => assets.fetch("toss_#{version}_linux_amd64.tar.gz"),
+            "{{LINUX_ARM64_SHA256}}" => assets.fetch("toss_#{version}_linux_arm64.tar.gz"),
+          }
+
+          formula = File.read("homebrew-tap/toss.rb.template")
+          replacements.each do |placeholder, value|
+            formula = formula.gsub(placeholder, value)
+          end
+          File.write("homebrew-tap/toss.rb", formula)
+          RUBY
+
+      - name: Commit and push formula update
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        shell: bash
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- toss.rb; then
+            echo "No Homebrew formula changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add toss.rb
+          git commit -m "feat: update toss to ${VERSION#v}"
+          git push origin HEAD:main

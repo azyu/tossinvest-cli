@@ -8,11 +8,12 @@ Toss Securities Open API wrapper CLI. Rust workspace planned with a small CLI cr
 
 ## Current State
 
-Phase 1 read-only CLI is implemented and final-reviewed. Phase 2 typed wrapper/library core is complete; Phase 3 order-capable CLI is implemented and final-verified. GitHub Actions CI and release-build workflows are configured.
+Phase 1 read-only CLI is implemented and final-reviewed. Phase 2 typed wrapper/library core is complete; Phase 3 order-capable CLI is implemented and final-verified. GitHub Actions CI, release-build workflows, and Homebrew tap distribution are configured.
 
 - Spec: `docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md`
 - Phase 1 plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 - GitHub Actions plan: `docs/superpowers/plans/2026-06-19-github-actions.md`
+- Homebrew tap plan: `docs/superpowers/plans/2026-06-19-homebrew-tap.md`
 - Reference CLI reviewed: `/Volumes/EXTSSD/code/personal/kis-cli`
 - Toss API source of truth: `https://openapi.tossinvest.com/openapi-docs/latest/openapi.json`
 
