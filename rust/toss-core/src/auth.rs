@@ -1,6 +1,5 @@
 use std::fmt;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -472,7 +471,10 @@ mod tests {
         assert_eq!(mode, 0o600);
         assert_ne!(metadata.ino(), before_ino);
         let contents = fs::read_to_string(&cache_path).unwrap();
-        assert!(contents.contains("\"access_token\": \"token-4\""), "{contents}");
+        assert!(
+            contents.contains("\"access_token\": \"token-4\""),
+            "{contents}"
+        );
     }
 
     #[tokio::test]
@@ -569,8 +571,9 @@ mod tests {
                     name: "X-Request-Id".to_string(),
                     value: "req-400".to_string(),
                 }],
-                body: br#"{"error":"invalid_grant","error_description":"client secret is invalid"}"#
-                    .to_vec(),
+                body:
+                    br#"{"error":"invalid_grant","error_description":"client secret is invalid"}"#
+                        .to_vec(),
             },
         };
         let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
@@ -591,7 +594,6 @@ mod tests {
 
         assert_eq!(requests.lock().len(), 1);
     }
-
 
     #[tokio::test]
     async fn reuses_cached_token_in_memory() {

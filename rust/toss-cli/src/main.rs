@@ -1,4 +1,4 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{Cli, OutputFormat};
