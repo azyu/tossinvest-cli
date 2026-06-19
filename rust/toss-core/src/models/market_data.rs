@@ -6,6 +6,7 @@ use super::common::{Currency, MoneyValue, QuantityValue};
 #[serde(rename_all = "camelCase")]
 pub struct PriceResponse {
     pub symbol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     pub last_price: MoneyValue,
     pub currency: Currency,
@@ -21,6 +22,7 @@ pub struct OrderbookEntry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderbookResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     pub currency: Currency,
     pub asks: Vec<OrderbookEntry>,
@@ -32,6 +34,7 @@ pub struct OrderbookResponse {
 pub struct Trade {
     pub price: MoneyValue,
     pub volume: QuantityValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     pub currency: Currency,
 }
@@ -39,8 +42,11 @@ pub struct Trade {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PriceLimitResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub upper_limit_price: Option<MoneyValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lower_limit_price: Option<MoneyValue>,
     pub currency: Currency,
 }
@@ -49,12 +55,14 @@ pub struct PriceLimitResponse {
 #[serde(rename_all = "camelCase")]
 pub struct CandlePageResponse {
     pub candles: Vec<Candle>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub next_before: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Candle {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     pub open_price: MoneyValue,
     pub high_price: MoneyValue,

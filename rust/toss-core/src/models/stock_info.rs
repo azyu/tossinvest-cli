@@ -25,6 +25,7 @@ pub struct KrMarketDetail {
     pub nxt_supported: bool,
     pub krx_trading_suspended: bool,
     #[serde(rename = "nxtTradingSuspended")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub nxt_trading_suspended: Option<bool>,
 }
 
@@ -40,10 +41,14 @@ pub struct StockInfo {
     pub is_common_share: bool,
     pub status: StockStatus,
     pub currency: Currency,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub list_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub delist_date: Option<String>,
     pub shares_outstanding: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub leverage_factor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub korean_market_detail: Option<KrMarketDetail>,
 }
 
@@ -51,7 +56,10 @@ pub struct StockInfo {
 #[serde(rename_all = "camelCase")]
 pub struct StockWarning {
     pub warning_type: WarningType,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exchange: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
 }

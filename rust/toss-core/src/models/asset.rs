@@ -6,6 +6,7 @@ use super::common::{Currency, MarketCountry, MoneyValue, QuantityValue};
 #[serde(rename_all = "camelCase")]
 pub struct PriceBreakdown {
     pub krw: MoneyValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usd: Option<MoneyValue>,
 }
 
@@ -37,6 +38,7 @@ pub struct DailyProfitLoss {
 #[serde(rename_all = "camelCase")]
 pub struct Cost {
     pub commission: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tax: Option<String>,
 }
 

@@ -32,9 +32,11 @@ struct ErrorEnvelope<'a> {
 #[derive(Debug, Serialize)]
 struct ErrorOutput {
     kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<String>,
     message: String,
     #[serde(rename = "requestId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     request_id: Option<String>,
 }
 
@@ -87,15 +89,17 @@ async fn run_client_command<T: Transport>(
         },
         cli::Command::Price(args) => {
             let symbols = args.symbols.as_deref().unwrap_or(&args.symbol);
-            market_data::prices_json(client, symbols).await?
+            serde_json::to_value(market_data::prices(client, symbols).await?)?
         }
         cli::Command::Quote(args) => match args.command {
             cli::QuoteCommand::Orderbook(arg) => {
-                market_data::orderbook_json(client, &arg.symbol).await?
+                serde_json::to_value(market_data::orderbook(client, &arg.symbol).await?)?
             }
-            cli::QuoteCommand::Trades(arg) => market_data::trades_json(client, &arg.symbol).await?,
+            cli::QuoteCommand::Trades(arg) => {
+                serde_json::to_value(market_data::trades(client, &arg.symbol).await?)?
+            }
             cli::QuoteCommand::Limits(arg) => {
-                market_data::price_limits_json(client, &arg.symbol).await?
+                serde_json::to_value(market_data::price_limits(client, &arg.symbol).await?)?
             }
         },
         cli::Command::Chart(args) => match args.command {
@@ -110,30 +114,40 @@ async fn run_client_command<T: Transport>(
                 if let Some(to) = args.to {
                     query.push(("to".to_string(), to));
                 }
-                market_data::candles_json(client, query).await?
+                serde_json::to_value(market_data::candles(client, query).await?)?
             }
         },
         cli::Command::Stock(args) => match args.command {
-            cli::StockCommand::Get(arg) => stock_info::stocks_json(client, &arg.symbol).await?,
-            cli::StockCommand::Warnings(arg) => {
-                stock_info::warnings_json(client, &arg.symbol).await?
+            cli::StockCommand::Get(arg) => {
+                serde_json::to_value(stock_info::stocks(client, &arg.symbol).await?)?
             }
-            cli::StockCommand::Search(arg) => stock_info::stocks_json(client, &arg.symbols).await?,
+            cli::StockCommand::Warnings(arg) => {
+                serde_json::to_value(stock_info::warnings(client, &arg.symbol).await?)?
+            }
+            cli::StockCommand::Search(arg) => {
+                serde_json::to_value(stock_info::stocks(client, &arg.symbols).await?)?
+            }
         },
         cli::Command::Market(args) => match args.command {
-            cli::MarketCommand::ExchangeRate => market_info::exchange_rate_json(client).await?,
+            cli::MarketCommand::ExchangeRate => {
+                serde_json::to_value(market_info::exchange_rate(client).await?)?
+            }
             cli::MarketCommand::Calendar(args) => match args.command {
-                cli::CalendarCommand::Kr => market_info::kr_calendar_json(client).await?,
-                cli::CalendarCommand::Us => market_info::us_calendar_json(client).await?,
+                cli::CalendarCommand::Kr => {
+                    serde_json::to_value(market_info::kr_calendar(client).await?)?
+                }
+                cli::CalendarCommand::Us => {
+                    serde_json::to_value(market_info::us_calendar(client).await?)?
+                }
             },
         },
         cli::Command::Account(args) => match args.command {
-            cli::AccountCommand::List => account::list_json(client).await?,
+            cli::AccountCommand::List => serde_json::to_value(account::list(client).await?)?,
             cli::AccountCommand::Use(_) => {
                 unreachable!("account use is handled before client dispatch")
             }
         },
-        cli::Command::Holdings => asset::holdings_json(client).await?,
+        cli::Command::Holdings => serde_json::to_value(asset::holdings(client).await?)?,
         cli::Command::Config => unreachable!("config is handled before client dispatch"),
     };
     write_output(output_format, command_name, value, writer)
@@ -443,6 +457,74 @@ mod tests {
             captured[1].query,
             vec![("symbols".to_string(), "AAPL".to_string())]
         );
+    }
+    #[tokio::test]
+    async fn rejects_incomplete_typed_stock_payloads() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "access_token": "token-1",
+                    "token_type": "Bearer",
+                    "expires_in": 86400
+                }))
+                .unwrap(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": [
+                        {
+                            "symbol": "AAPL",
+                            "englishName": "APPLE INC",
+                            "isinCode": "US0378331005",
+                            "market": "NASDAQ",
+                            "securityType": "COMMON",
+                            "isCommonShare": true,
+                            "status": "ACTIVE",
+                            "currency": "USD",
+                            "sharesOutstanding": "100"
+                        }
+                    ]
+                }))
+                .unwrap(),
+            },
+        ]));
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses,
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join("token.json"),
+            transport.clone(),
+        );
+        let client = TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq: None,
+            },
+            token_manager,
+            transport,
+        );
+
+        let err = run_client_command(
+            OutputFormat::Json,
+            "stock",
+            stock_get_command(),
+            &client,
+            &mut Vec::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("missing field"), "{err}");
     }
 }
 

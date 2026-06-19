@@ -254,4 +254,29 @@ mod tests {
         assert_eq!(omitted.symbol, "AAPL");
         assert_eq!(with_null.symbol, "AAPL");
     }
+    #[test]
+    fn serializes_omitted_optional_stock_fields_without_nulls() {
+        let stock = StockInfo {
+            symbol: "AAPL".to_string(),
+            name: "Apple".to_string(),
+            english_name: "APPLE INC".to_string(),
+            isin_code: "US0378331005".to_string(),
+            market: crate::models::stock_info::StockMarket("NASDAQ".to_string()),
+            security_type: crate::models::stock_info::SecurityType("STOCK".to_string()),
+            is_common_share: true,
+            status: crate::models::stock_info::StockStatus("ACTIVE".to_string()),
+            currency: crate::models::common::Currency("USD".to_string()),
+            list_date: None,
+            delist_date: None,
+            shares_outstanding: "1000000000".to_string(),
+            leverage_factor: None,
+            korean_market_detail: None,
+        };
+
+        let value = serde_json::to_value(stock).unwrap();
+        assert!(value.get("listDate").is_none(), "{value}");
+        assert!(value.get("delistDate").is_none(), "{value}");
+        assert!(value.get("leverageFactor").is_none(), "{value}");
+        assert!(value.get("koreanMarketDetail").is_none(), "{value}");
+    }
 }

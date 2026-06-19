@@ -23,6 +23,7 @@ pub struct ExchangeRateResponse {
 #[serde(rename_all = "camelCase")]
 pub struct PreMarketSession {
     pub start_time: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_price_auction_start_time: Option<String>,
     pub end_time: String,
 }
@@ -31,6 +32,7 @@ pub struct PreMarketSession {
 #[serde(rename_all = "camelCase")]
 pub struct RegularMarketSession {
     pub start_time: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_price_auction_start_time: Option<String>,
     pub end_time: String,
 }
@@ -39,6 +41,7 @@ pub struct RegularMarketSession {
 #[serde(rename_all = "camelCase")]
 pub struct AfterMarketSession {
     pub start_time: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_price_auction_end_time: Option<String>,
     pub end_time: String,
 }
@@ -46,8 +49,11 @@ pub struct AfterMarketSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegratedHour {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pre_market: Option<PreMarketSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub regular_market: Option<RegularMarketSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after_market: Option<AfterMarketSession>,
 }
 
@@ -55,6 +61,7 @@ pub struct IntegratedHour {
 #[serde(rename_all = "camelCase")]
 pub struct KrMarketDay {
     pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub integrated: Option<IntegratedHour>,
 }
 
@@ -90,9 +97,13 @@ pub struct UsAfterMarketSession {
 #[serde(rename_all = "camelCase")]
 pub struct UsMarketDay {
     pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub day_market: Option<UsDayMarketSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pre_market: Option<UsPreMarketSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub regular_market: Option<UsRegularMarketSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after_market: Option<UsAfterMarketSession>,
 }
 
