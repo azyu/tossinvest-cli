@@ -112,10 +112,12 @@ impl<T: Transport> TokenManager<T> {
                 body: Some(body.into_bytes()),
             })
             .await?;
-        if response.status == 401 || response.status == 400 {
-            return Err(TossError::Auth(
-                String::from_utf8_lossy(&response.body).to_string(),
-            ));
+        if response.status == 429 {
+            return Err(TossError::RateLimit {
+                message: "rate limit exceeded".to_string(),
+                retry_after: header_value(&response.headers, "retry-after"),
+                request_id: header_value(&response.headers, "x-request-id"),
+            });
         }
         if response.status >= 400 {
             return Err(TossError::Api {
@@ -216,16 +218,51 @@ fn push_form_encoded(out: &mut String, value: &str) {
 #[cfg(unix)]
 fn write_cached_token(path: &Path, payload: &[u8]) -> std::io::Result<()> {
     use std::fs::{self, OpenOptions};
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)?;
-    file.write_all(payload)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| std::borrow::Cow::Borrowed("token.json"));
+    let pid = std::process::id();
+
+    for attempt in 0..16u32 {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temp_path = dir.join(format!(".{file_name}.{pid}.{nanos}.{attempt}.tmp"));
+        let mut file = match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&temp_path)
+        {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(err),
+        };
+
+        let result = (|| {
+            file.write_all(payload)?;
+            file.sync_all()?;
+            drop(file);
+            fs::rename(&temp_path, path)
+        })();
+
+        if result.is_err() {
+            let _ = fs::remove_file(&temp_path);
+        }
+        return result;
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "unable to allocate token cache temp file",
+    ))
 }
 
 #[cfg(not(unix))]
@@ -242,6 +279,7 @@ mod tests {
     use parking_lot::Mutex;
 
     use super::TokenManager;
+    use crate::error::TossError;
     use crate::transport::{Header, HttpMethod, HttpRequest, HttpResponse, Transport};
 
     #[derive(Clone, Debug)]
@@ -376,7 +414,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn rewrites_existing_token_cache_with_owner_only_mode() {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
         let requests = Arc::new(Mutex::new(Vec::new()));
         let transport = RecordingTransport {
@@ -400,6 +438,7 @@ mod tests {
         )
         .unwrap();
         fs::set_permissions(&cache_path, fs::Permissions::from_mode(0o644)).unwrap();
+        let before_ino = fs::metadata(&cache_path).unwrap().ino();
         let manager = TokenManager::new_with_cache_path(
             "client-4".to_string(),
             "secret-4".to_string(),
@@ -409,10 +448,59 @@ mod tests {
 
         assert_eq!(manager.get_token().await.unwrap(), "token-4");
 
-        let mode = fs::metadata(&cache_path).unwrap().permissions().mode() & 0o777;
+        let metadata = fs::metadata(&cache_path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
+        assert_ne!(metadata.ino(), before_ino);
         let contents = fs::read_to_string(&cache_path).unwrap();
         assert!(contents.contains("\"access_token\": \"token-4\""), "{contents}");
+    }
+
+    #[tokio::test]
+    async fn classifies_token_endpoint_429_as_rate_limit() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests: requests.clone(),
+            response: HttpResponse {
+                status: 429,
+                headers: vec![
+                    Header {
+                        name: "Retry-After".to_string(),
+                        value: "120".to_string(),
+                    },
+                    Header {
+                        name: "X-Request-Id".to_string(),
+                        value: "req-429".to_string(),
+                    },
+                ],
+                body: b"slow down".to_vec(),
+            },
+        };
+        let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
+        let manager = TokenManager::new_with_cache_path(
+            "client-429".to_string(),
+            "secret-429".to_string(),
+            cache_path,
+            transport,
+        );
+
+        let err = manager.get_token().await.unwrap_err();
+        match err {
+            TossError::RateLimit {
+                message,
+                retry_after,
+                request_id,
+            } => {
+                assert_eq!(message, "rate limit exceeded");
+                assert_eq!(retry_after.as_deref(), Some("120"));
+                assert_eq!(request_id.as_deref(), Some("req-429"));
+            }
+            other => panic!("expected rate limit error, got {other:?}"),
+        }
+
+        let captured = requests.lock();
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].path, "/oauth2/token");
     }
 
 
