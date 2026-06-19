@@ -10,8 +10,11 @@ use toss_core::client::TossClient;
 use toss_core::config::{self, AppConfig};
 use toss_core::market_data;
 use toss_core::market_info;
+use toss_core::order;
+use toss_core::order_info;
 use toss_core::stock_info;
-use toss_core::transport::Transport;
+use toss_core::transport::{HttpMethod, HttpRequest, Transport};
+use toss_core::{OrderCreateRequest, OrderModifyRequest, OrderSide as CoreOrderSide};
 
 use crate::cli::{self, OutputFormat};
 use crate::render;
@@ -51,11 +54,6 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
     } = cli;
     let command_name = command.name();
     let output_format = if json { OutputFormat::Json } else { output };
-    if matches!(command, cli::Command::Order(_)) {
-        return Err(anyhow::anyhow!(
-            "order command dispatch is not implemented yet"
-        ));
-    }
     let app_config = config::load(config.as_deref(), account.as_deref())?;
 
     match command {
@@ -152,16 +150,143 @@ async fn run_client_command<T: Transport>(
                 unreachable!("account use is handled before client dispatch")
             }
         },
-        cli::Command::Order(_) => {
-            return Err(anyhow::anyhow!(
-                "order command dispatch is not implemented yet"
-            ));
-        }
+        cli::Command::Order(args) => match args.command {
+            cli::OrderCommand::Buy(args) => {
+                if args.dry_run {
+                    let request = order::build_create_dry_run(
+                        client,
+                        &build_order_create_request(&args, CoreOrderSide::BUY),
+                    )
+                    .await?;
+                    dry_run_output(request)?
+                } else {
+                    return Err(toss_core::TossError::Validation(
+                        "mutating order commands require --dry-run or --confirm".to_string(),
+                    )
+                    .into());
+                }
+            }
+            cli::OrderCommand::Sell(args) => {
+                if args.dry_run {
+                    let request = order::build_create_dry_run(
+                        client,
+                        &build_order_create_request(&args, CoreOrderSide::SELL),
+                    )
+                    .await?;
+                    dry_run_output(request)?
+                } else {
+                    return Err(toss_core::TossError::Validation(
+                        "mutating order commands require --dry-run or --confirm".to_string(),
+                    )
+                    .into());
+                }
+            }
+            cli::OrderCommand::Modify(args) => {
+                if args.dry_run {
+                    let request = order::build_modify_dry_run(
+                        client,
+                        &args.order_id,
+                        &build_order_modify_request(&args),
+                    )
+                    .await?;
+                    dry_run_output(request)?
+                } else {
+                    return Err(toss_core::TossError::Validation(
+                        "mutating order commands require --dry-run or --confirm".to_string(),
+                    )
+                    .into());
+                }
+            }
+            cli::OrderCommand::Cancel(args) => {
+                if args.dry_run {
+                    let request = order::build_cancel_dry_run(client, &args.order_id).await?;
+                    dry_run_output(request)?
+                } else {
+                    return Err(toss_core::TossError::Validation(
+                        "mutating order commands require --dry-run or --confirm".to_string(),
+                    )
+                    .into());
+                }
+            }
+            cli::OrderCommand::BuyingPower(args) => {
+                serde_json::to_value(order_info::buying_power(client, &args.currency).await?)?
+            }
+            cli::OrderCommand::SellableQuantity(args) => {
+                serde_json::to_value(order_info::sellable_quantity(client, &args.symbol).await?)?
+            }
+            cli::OrderCommand::Commissions => {
+                serde_json::to_value(order_info::commissions(client).await?)?
+            }
+        },
         cli::Command::Holdings => serde_json::to_value(asset::holdings(client).await?)?,
         cli::Command::Config => unreachable!("config is handled before client dispatch"),
     };
     write_output(output_format, command_name, value, writer)
 }
+fn build_order_create_request(
+    args: &cli::OrderCreateArgs,
+    side: CoreOrderSide,
+) -> OrderCreateRequest {
+    let order_type = match args.order_type {
+        cli::OrderType::Limit => toss_core::OrderType::LIMIT,
+        cli::OrderType::Market => toss_core::OrderType::MARKET,
+    };
+    OrderCreateRequest {
+        client_order_id: args.client_order_id.clone(),
+        symbol: args.symbol.clone(),
+        side,
+        order_type,
+        time_in_force: None,
+        quantity: args.qty.as_ref().map(|value| json!(value)),
+        price: args.price.as_ref().map(|value| json!(value)),
+        confirm_high_value_order: args.confirm_high_value_order.then_some(true),
+        order_amount: args.amount.as_ref().map(|value| json!(value)),
+    }
+}
+
+fn build_order_modify_request(args: &cli::OrderModifyArgs) -> OrderModifyRequest {
+    let order_type = match args.order_type {
+        cli::OrderType::Limit => toss_core::OrderType::LIMIT,
+        cli::OrderType::Market => toss_core::OrderType::MARKET,
+    };
+    OrderModifyRequest {
+        order_type,
+        quantity: args.qty.as_ref().map(|value| json!(value)),
+        price: args.price.as_ref().map(|value| json!(value)),
+        confirm_high_value_order: args.confirm_high_value_order.then_some(true),
+    }
+}
+
+fn dry_run_output(request: HttpRequest) -> Result<Value> {
+    let HttpRequest {
+        method,
+        path,
+        headers,
+        body,
+        ..
+    } = request;
+    let body = match body {
+        Some(body) => serde_json::from_slice(&body)?,
+        None => Value::Null,
+    };
+    Ok(json!({
+        "dryRun": true,
+        "method": http_method_name(method),
+        "path": path,
+        "accountHeaderPresent": headers
+            .iter()
+            .any(|header| header.name == "X-Tossinvest-Account"),
+        "body": body,
+    }))
+}
+
+fn http_method_name(method: HttpMethod) -> &'static str {
+    match method {
+        HttpMethod::Get => "GET",
+        HttpMethod::Post => "POST",
+    }
+}
+
 fn write_output(
     output_format: OutputFormat,
     command: &str,
@@ -358,6 +483,341 @@ mod tests {
                 symbol: "AAPL".to_string(),
             }),
         })
+    }
+
+    fn token_response() -> HttpResponse {
+        HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: serde_json::to_vec(&json!({
+                "access_token": "token-1",
+                "token_type": "Bearer",
+                "expires_in": 86400
+            }))
+            .unwrap(),
+        }
+    }
+
+    fn order_client(
+        requests: Arc<Mutex<Vec<HttpRequest>>>,
+        responses: Arc<Mutex<Vec<HttpResponse>>>,
+        name: &str,
+        account_seq: Option<u64>,
+    ) -> TossClient<QueueTransport> {
+        let transport = QueueTransport {
+            requests,
+            responses,
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join(format!("{name}-token.json")),
+            transport.clone(),
+        );
+        TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq,
+            },
+            token_manager,
+            transport,
+        )
+    }
+
+    fn order_buy_command(dry_run: bool, confirm: bool) -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::Buy(cli::OrderCreateArgs {
+                symbol: "AAPL".to_string(),
+                qty: Some("1".to_string()),
+                amount: None,
+                order_type: cli::OrderType::Limit,
+                price: Some("180".to_string()),
+                client_order_id: Some("client-1".to_string()),
+                dry_run,
+                confirm,
+                confirm_high_value_order: true,
+            }),
+        })
+    }
+
+    fn order_modify_command(dry_run: bool, confirm: bool) -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::Modify(cli::OrderModifyArgs {
+                order_id: "order-123".to_string(),
+                qty: Some("2".to_string()),
+                order_type: cli::OrderType::Limit,
+                price: Some("181.00".to_string()),
+                dry_run,
+                confirm,
+                confirm_high_value_order: true,
+            }),
+        })
+    }
+
+    fn order_cancel_command(dry_run: bool, confirm: bool) -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::Cancel(cli::OrderCancelArgs {
+                order_id: "order-123".to_string(),
+                dry_run,
+                confirm,
+            }),
+        })
+    }
+
+    fn order_buying_power_command() -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::BuyingPower(cli::OrderBuyingPowerArgs {
+                currency: "USD".to_string(),
+            }),
+        })
+    }
+
+    fn order_sellable_quantity_command() -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::SellableQuantity(cli::OrderSellableQuantityArgs {
+                symbol: "AAPL".to_string(),
+            }),
+        })
+    }
+
+    fn order_commissions_command() -> cli::Command {
+        cli::Command::Order(cli::OrderArgs {
+            command: cli::OrderCommand::Commissions,
+        })
+    }
+
+    #[tokio::test]
+    async fn dry_run_order_commands_write_safe_json() {
+        let cases = [
+            (
+                "buy",
+                order_buy_command(true, true),
+                json!({
+                    "clientOrderId": "client-1",
+                    "symbol": "AAPL",
+                    "side": "BUY",
+                    "orderType": "LIMIT",
+                    "quantity": "1",
+                    "price": "180",
+                    "confirmHighValueOrder": true
+                }),
+                "/api/v1/orders",
+            ),
+            (
+                "modify",
+                order_modify_command(true, true),
+                json!({
+                    "orderType": "LIMIT",
+                    "quantity": "2",
+                    "price": "181.00",
+                    "confirmHighValueOrder": true
+                }),
+                "/api/v1/orders/order-123/modify",
+            ),
+            (
+                "cancel",
+                order_cancel_command(true, true),
+                json!({}),
+                "/api/v1/orders/order-123/cancel",
+            ),
+        ];
+
+        for (name, command, expected_body, expected_path) in cases {
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let responses = Arc::new(Mutex::new(Vec::new()));
+            let client = order_client(requests.clone(), responses, name, Some(42));
+
+            let mut buffer = Vec::new();
+            run_client_command(OutputFormat::Json, "order", command, &client, &mut buffer)
+                .await
+                .unwrap();
+
+            let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+            assert_eq!(envelope["ok"], true);
+            assert_eq!(envelope["command"], "order");
+            let data = &envelope["data"];
+            assert_eq!(data["dryRun"], true);
+            assert_eq!(data["method"], "POST");
+            assert_eq!(data["path"], expected_path);
+            assert_eq!(data["accountHeaderPresent"], true);
+            assert_eq!(data["body"], expected_body);
+            assert!(data.get("authorization").is_none(), "{envelope}");
+            assert!(data.get("token").is_none(), "{envelope}");
+            assert!(data.get("clientSecret").is_none(), "{envelope}");
+            assert!(data.get("client_id").is_none(), "{envelope}");
+            assert!(requests.lock().unwrap().is_empty(), "{envelope}");
+        }
+    }
+
+    #[tokio::test]
+    async fn order_buying_power_dispatches_through_wrapper() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": {
+                        "currency": "USD",
+                        "cashBuyingPower": "1234.56"
+                    }
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "buying-power", Some(42));
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "order",
+            order_buying_power_command(),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+        assert_eq!(
+            envelope["data"],
+            json!({
+                "currency": "USD",
+                "cashBuyingPower": "1234.56"
+            })
+        );
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
+        assert_eq!(captured[1].path, "/api/v1/buying-power");
+        assert_eq!(
+            captured[1].query,
+            vec![("currency".to_string(), "USD".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn order_sellable_quantity_dispatches_through_wrapper() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": {
+                        "sellableQuantity": "7"
+                    }
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "sellable-quantity", Some(42));
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "order",
+            order_sellable_quantity_command(),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+        assert_eq!(
+            envelope["data"],
+            json!({
+                "sellableQuantity": "7"
+            })
+        );
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
+        assert_eq!(captured[1].path, "/api/v1/sellable-quantity");
+        assert_eq!(
+            captured[1].query,
+            vec![("symbol".to_string(), "AAPL".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn order_commissions_dispatches_through_wrapper() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": [
+                        {
+                            "marketCountry": "US",
+                            "commissionRate": "0.001"
+                        }
+                    ]
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "commissions", Some(42));
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "order",
+            order_commissions_command(),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+        assert_eq!(
+            envelope["data"],
+            json!([
+                {
+                    "marketCountry": "US",
+                    "commissionRate": "0.001"
+                }
+            ])
+        );
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
+        assert_eq!(captured[1].path, "/api/v1/commissions");
+        assert!(captured[1].query.is_empty());
+    }
+
+    #[tokio::test]
+    async fn order_buy_without_dry_run_or_confirm_is_rejected() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(Vec::new()));
+        let client = order_client(requests, responses, "missing-safety", Some(42));
+
+        let err = run_client_command(
+            OutputFormat::Json,
+            "order",
+            order_buy_command(false, false),
+            &client,
+            &mut Vec::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("dry-run"), "{err}");
+        assert!(err.to_string().contains("confirm"), "{err}");
     }
 
     #[test]

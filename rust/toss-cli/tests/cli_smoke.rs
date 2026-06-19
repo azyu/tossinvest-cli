@@ -22,6 +22,25 @@ fn assert_json_parse_error(output: std::process::Output, command: &str) {
     assert_eq!(envelope["error"]["kind"], "validation");
 }
 
+fn assert_json_runtime_validation_error(
+    output: std::process::Output,
+    command: &str,
+) -> serde_json::Value {
+    assert!(!output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "{:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["command"], command);
+    assert_eq!(envelope["error"]["kind"], "validation");
+    envelope
+}
+
 #[test]
 fn parses_json_price_command() {
     let cli = Cli::parse_from(["toss", "--json", "price", "005930"]);
@@ -356,6 +375,106 @@ fn runs_account_use_command_through_binary() {
     assert!(contents.contains("account_seq: 42"));
     assert!(contents.contains("client_id: client-abc"));
     assert!(contents.contains("client_secret: secret-xyz"));
+}
+
+#[test]
+fn runs_order_buy_dry_run_command_through_binary() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.yaml");
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\naccount_seq: 5\n",
+    )
+    .unwrap();
+
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "buy",
+            "--symbol",
+            "AAPL",
+            "--qty",
+            "1",
+            "--type",
+            "limit",
+            "--price",
+            "180",
+            "--client-order-id",
+            "client-1",
+            "--confirm-high-value-order",
+            "--dry-run",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], true);
+    assert_eq!(envelope["command"], "order");
+    assert_eq!(envelope["data"]["dryRun"], true);
+    assert_eq!(envelope["data"]["method"], "POST");
+    assert_eq!(envelope["data"]["path"], "/api/v1/orders");
+    assert_eq!(envelope["data"]["accountHeaderPresent"], true);
+    assert_eq!(
+        envelope["data"]["body"],
+        serde_json::json!({
+            "clientOrderId": "client-1",
+            "symbol": "AAPL",
+            "side": "BUY",
+            "orderType": "LIMIT",
+            "quantity": "1",
+            "price": "180",
+            "confirmHighValueOrder": true
+        })
+    );
+    assert!(
+        envelope["data"].get("authorization").is_none(),
+        "{envelope}"
+    );
+    assert!(
+        envelope["data"].get("client_secret").is_none(),
+        "{envelope}"
+    );
+    assert!(envelope["data"].get("client_id").is_none(), "{envelope}");
+}
+
+#[test]
+fn emits_json_validation_error_for_order_buy_without_dry_run_or_confirm() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.yaml");
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\naccount_seq: 5\n",
+    )
+    .unwrap();
+
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "buy",
+            "--symbol",
+            "AAPL",
+            "--qty",
+            "1",
+            "--type",
+            "limit",
+            "--price",
+            "180",
+        ])
+        .output()
+        .unwrap();
+
+    let envelope = assert_json_runtime_validation_error(output, "order");
+    let message = envelope["error"]["message"].as_str().unwrap();
+    assert!(message.contains("--dry-run"), "{message}");
+    assert!(message.contains("--confirm"), "{message}");
 }
 
 #[test]
