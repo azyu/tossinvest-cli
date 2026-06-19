@@ -77,3 +77,7 @@ Error JSON output uses:
 
 Phase 1 is read-only. Order creation, modification, and cancellation are intentionally not exposed yet.
 The CLI never prints `client_secret` or access tokens in normal output.
+## Library core
+
+`toss-core` exposes typed read-only wrappers for the Phase 1 API surface. Financial values are represented as `serde_json::Value` or strings instead of floating-point numbers.
+

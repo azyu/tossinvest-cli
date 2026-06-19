@@ -5,10 +5,9 @@
 
 ## Current Priority
 
-Build Phase 2: typed wrapper/library core.
+Build Phase 3: order-capable CLI.
 
-Phase 2 must produce typed wrapper/library core, stable JSON compatibility shims, and tests that verify typed deserialization without real credentials.
-
+Phase 2 final verification has passed; Phase 3 is now the active next step.
 ## Execution Mode
 
 File-based coordination.
@@ -28,7 +27,6 @@ File-based coordination.
 - Never print `client_secret` or access tokens in normal command output.
 - JSON mode must use stable success/error envelopes for automation.
 - Network-dependent behavior must be testable through a mock transport.
-| [ ] | Phase 2 typed wrapper/library core | In progress. Task 1 and Task 2 are complete; tasks 3+ remain. |
 
 ## CLI UX Direction
 
