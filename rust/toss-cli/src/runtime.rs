@@ -51,6 +51,11 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
     } = cli;
     let command_name = command.name();
     let output_format = if json { OutputFormat::Json } else { output };
+    if matches!(command, cli::Command::Order(_)) {
+        return Err(anyhow::anyhow!(
+            "order command dispatch is not implemented yet"
+        ));
+    }
     let app_config = config::load(config.as_deref(), account.as_deref())?;
 
     match command {
@@ -147,6 +152,11 @@ async fn run_client_command<T: Transport>(
                 unreachable!("account use is handled before client dispatch")
             }
         },
+        cli::Command::Order(_) => {
+            return Err(anyhow::anyhow!(
+                "order command dispatch is not implemented yet"
+            ));
+        }
         cli::Command::Holdings => serde_json::to_value(asset::holdings(client).await?)?,
         cli::Command::Config => unreachable!("config is handled before client dispatch"),
     };

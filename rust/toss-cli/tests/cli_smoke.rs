@@ -3,8 +3,8 @@ use std::process::Command as ProcessCommand;
 
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
-    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OutputFormat, QuoteCommand,
-    StockCommand,
+    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand, OrderType,
+    OutputFormat, QuoteCommand, StockCommand,
 };
 
 fn assert_json_parse_error(output: std::process::Output, command: &str) {
@@ -88,11 +88,186 @@ fn parses_quote_orderbook_command() {
 }
 
 #[test]
-fn rejects_order_create_modify_cancel_subcommands() {
-    for command in ["create", "modify", "cancel"] {
-        let err = Cli::try_parse_from(["toss", "order", command]).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+fn parses_order_read_only_commands() {
+    let cli = Cli::parse_from(["toss", "order", "buying-power", "--currency", "USD"]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::BuyingPower(args) => assert_eq!(args.currency, "USD"),
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
     }
+
+    let cli = Cli::parse_from(["toss", "order", "sellable-quantity", "--symbol", "AAPL"]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::SellableQuantity(args) => assert_eq!(args.symbol, "AAPL"),
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from(["toss", "order", "commissions"]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Commissions => {}
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_order_mutating_commands_with_safety_flags() {
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
+        "buy",
+        "--symbol",
+        "AAPL",
+        "--qty",
+        "1",
+        "--type",
+        "limit",
+        "--price",
+        "180",
+        "--client-order-id",
+        "client-1",
+        "--confirm-high-value-order",
+        "--dry-run",
+        "--confirm",
+    ]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Buy(args) => {
+                assert_eq!(args.symbol, "AAPL");
+                assert_eq!(args.qty.as_deref(), Some("1"));
+                assert_eq!(args.amount.as_deref(), None);
+                assert_eq!(args.order_type, OrderType::Limit);
+                assert_eq!(args.price.as_deref(), Some("180"));
+                assert_eq!(args.client_order_id.as_deref(), Some("client-1"));
+                assert!(args.dry_run);
+                assert!(args.confirm);
+                assert!(args.confirm_high_value_order);
+            }
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
+        "sell",
+        "--symbol",
+        "AAPL",
+        "--qty",
+        "1",
+        "--type",
+        "market",
+        "--dry-run",
+    ]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Sell(args) => {
+                assert_eq!(args.symbol, "AAPL");
+                assert_eq!(args.qty.as_deref(), Some("1"));
+                assert_eq!(args.amount.as_deref(), None);
+                assert_eq!(args.order_type, OrderType::Market);
+                assert!(args.dry_run);
+                assert!(!args.confirm);
+                assert!(!args.confirm_high_value_order);
+            }
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
+        "modify",
+        "opaque-id",
+        "--type",
+        "limit",
+        "--price",
+        "180",
+        "--confirm-high-value-order",
+        "--dry-run",
+    ]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Modify(args) => {
+                assert_eq!(args.order_id, "opaque-id");
+                assert_eq!(args.qty.as_deref(), None);
+                assert_eq!(args.order_type, OrderType::Limit);
+                assert_eq!(args.price.as_deref(), Some("180"));
+                assert!(args.dry_run);
+                assert!(!args.confirm);
+                assert!(args.confirm_high_value_order);
+            }
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
+        "cancel",
+        "opaque-id",
+        "--dry-run",
+        "--confirm",
+    ]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Cancel(args) => {
+                assert_eq!(args.order_id, "opaque-id");
+                assert!(args.dry_run);
+                assert!(args.confirm);
+            }
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn rejects_order_flags_outside_mutating_commands() {
+    let err = Cli::try_parse_from([
+        "toss",
+        "order",
+        "buying-power",
+        "--currency",
+        "USD",
+        "--dry-run",
+    ])
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+
+    let err = Cli::try_parse_from([
+        "toss",
+        "order",
+        "sellable-quantity",
+        "--symbol",
+        "AAPL",
+        "--confirm",
+    ])
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::UnknownArgument);
+
+    let err = Cli::try_parse_from([
+        "toss",
+        "order",
+        "modify",
+        "opaque-id",
+        "--type",
+        "limit",
+        "--client-order-id",
+        "client-1",
+    ])
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::UnknownArgument);
 }
 
 #[test]

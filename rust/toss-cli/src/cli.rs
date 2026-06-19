@@ -53,6 +53,7 @@ pub enum Command {
     Stock(StockArgs),
     Market(MarketArgs),
     Account(AccountArgs),
+    Order(OrderArgs),
     Holdings,
 }
 
@@ -67,8 +68,116 @@ impl Command {
             Self::Stock(_) => "stock",
             Self::Market(_) => "market",
             Self::Account(_) => "account",
+            Self::Order(_) => "order",
             Self::Holdings => "holdings",
         }
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct OrderArgs {
+    #[command(subcommand)]
+    pub command: OrderCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum OrderCommand {
+    Buy(OrderCreateArgs),
+    Sell(OrderCreateArgs),
+    Modify(OrderModifyArgs),
+    Cancel(OrderCancelArgs),
+    BuyingPower(OrderBuyingPowerArgs),
+    SellableQuantity(OrderSellableQuantityArgs),
+    Commissions,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderCreateArgs {
+    #[arg(long)]
+    pub symbol: String,
+    #[arg(long)]
+    pub qty: Option<String>,
+    #[arg(long)]
+    pub amount: Option<String>,
+    #[arg(long = "type", value_enum)]
+    pub order_type: OrderType,
+    #[arg(long)]
+    pub price: Option<String>,
+    #[arg(long = "client-order-id")]
+    pub client_order_id: Option<String>,
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub confirm: bool,
+    #[arg(long = "confirm-high-value-order")]
+    pub confirm_high_value_order: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderModifyArgs {
+    pub order_id: String,
+    #[arg(long)]
+    pub qty: Option<String>,
+    #[arg(long = "type", value_enum)]
+    pub order_type: OrderType,
+    #[arg(long)]
+    pub price: Option<String>,
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub confirm: bool,
+    #[arg(long = "confirm-high-value-order")]
+    pub confirm_high_value_order: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderCancelArgs {
+    pub order_id: String,
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub confirm: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderBuyingPowerArgs {
+    #[arg(long)]
+    pub currency: String,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderSellableQuantityArgs {
+    #[arg(long)]
+    pub symbol: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OrderType {
+    Limit,
+    Market,
+}
+
+impl std::fmt::Display for OrderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Limit => "LIMIT",
+            Self::Market => "MARKET",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OrderSide {
+    Buy,
+    Sell,
+}
+
+impl std::fmt::Display for OrderSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Buy => "BUY",
+            Self::Sell => "SELL",
+        })
     }
 }
 
