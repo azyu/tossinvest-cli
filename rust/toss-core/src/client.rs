@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::auth::TokenManager;
@@ -116,6 +116,68 @@ impl<T: Transport> TossClient<T> {
         let value = self.get_json(path, query, account_required).await?;
         Ok(serde_json::from_value(value)?)
     }
+    pub async fn post_typed<R, B>(&self, path: &str, body: &B, account_required: bool) -> Result<R>
+    where
+        R: DeserializeOwned,
+        B: Serialize,
+    {
+        let request = self
+            .build_post_request(path, body, account_required, true)
+            .await?;
+        let response = self.transport.send(request).await?;
+        let value = parse_response(response.status, &response.headers, &response.body)?;
+        Ok(serde_json::from_value(value)?)
+    }
+
+    pub async fn build_post_request<B>(
+        &self,
+        path: &str,
+        body: &B,
+        account_required: bool,
+        include_auth: bool,
+    ) -> Result<HttpRequest>
+    where
+        B: Serialize,
+    {
+        let account_seq = if account_required {
+            Some(self.config.account_seq.ok_or_else(|| {
+                TossError::Validation(
+                    "account sequence is required; run `toss account list` then `toss account use <accountSeq>`"
+                        .to_string(),
+                )
+            })?)
+        } else {
+            None
+        };
+        let mut headers = vec![Header {
+            name: "content-type".to_string(),
+            value: "application/json".to_string(),
+        }];
+        if include_auth {
+            let token = self.token_manager.get_token().await?;
+            headers.push(Header {
+                name: "authorization".to_string(),
+                value: format!("Bearer {token}"),
+            });
+        }
+        if let Some(account_seq) = account_seq {
+            headers.push(Header {
+                name: "X-Tossinvest-Account".to_string(),
+                value: account_seq.to_string(),
+            });
+        }
+        Ok(HttpRequest {
+            method: HttpMethod::Post,
+            path: path.to_string(),
+            query: Vec::new(),
+            headers,
+            body: Some(serialize_json_body(body)?),
+        })
+    }
+}
+
+fn serialize_json_body<B: Serialize>(body: &B) -> Result<Vec<u8>> {
+    Ok(serde_json::to_vec(body)?)
 }
 
 fn parse_response(status: u16, headers: &[Header], body: &[u8]) -> Result<Value> {
@@ -275,6 +337,187 @@ mod tests {
             err.to_string().contains("toss account use <accountSeq>"),
             "{err}"
         );
+    }
+    #[derive(Debug, serde::Serialize)]
+    struct PostProbeRequest {
+        symbol: String,
+        quantity: serde_json::Value,
+    }
+
+    #[derive(Debug, serde::Deserialize, PartialEq)]
+    #[serde(rename_all = "camelCase")]
+    struct PostProbeResponse {
+        order_id: String,
+    }
+
+    #[tokio::test]
+    async fn sends_post_with_json_body_and_auth() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":{"orderId":"order-1"}}"#.to_vec(),
+            },
+        ]));
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses,
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join("token.json"),
+            transport.clone(),
+        );
+        let client = TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq: Some(77),
+            },
+            token_manager,
+            transport,
+        );
+
+        let result: PostProbeResponse = client
+            .post_typed(
+                "/api/v1/orders",
+                &PostProbeRequest {
+                    symbol: "AAPL".to_string(),
+                    quantity: serde_json::json!("1"),
+                },
+                true,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.order_id, "order-1");
+
+        let captured = requests.lock();
+        let api_request = &captured[1];
+        assert_eq!(api_request.method, crate::transport::HttpMethod::Post);
+        assert!(
+            api_request
+                .headers
+                .iter()
+                .any(|h| h.name == "content-type" && h.value == "application/json")
+        );
+        assert!(
+            api_request
+                .headers
+                .iter()
+                .any(|h| h.name == "authorization" && h.value == "Bearer token-1")
+        );
+        assert!(
+            api_request
+                .headers
+                .iter()
+                .any(|h| h.name == "X-Tossinvest-Account" && h.value == "77")
+        );
+        assert_eq!(
+            api_request.body.as_deref(),
+            Some(br#"{"symbol":"AAPL","quantity":"1"}"#.as_ref())
+        );
+    }
+
+    #[tokio::test]
+    async fn builds_post_request_without_auth() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses: Arc::new(Mutex::new(Vec::new())),
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join("token.json"),
+            transport.clone(),
+        );
+        let client = TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq: Some(77),
+            },
+            token_manager,
+            transport,
+        );
+
+        let request = client
+            .build_post_request(
+                "/api/v1/orders",
+                &PostProbeRequest {
+                    symbol: "AAPL".to_string(),
+                    quantity: serde_json::json!("1"),
+                },
+                false,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(request.method, crate::transport::HttpMethod::Post);
+        assert_eq!(request.path, "/api/v1/orders");
+        assert!(
+            request
+                .headers
+                .iter()
+                .any(|h| h.name == "content-type" && h.value == "application/json")
+        );
+        assert!(!request.headers.iter().any(|h| h.name == "authorization"));
+        assert_eq!(
+            request.body.as_deref(),
+            Some(br#"{"symbol":"AAPL","quantity":"1"}"#.as_ref())
+        );
+        assert!(requests.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejects_account_bound_post_without_account_before_token_fetch() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses: Arc::new(Mutex::new(Vec::new())),
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join("token.json"),
+            transport.clone(),
+        );
+        let client = TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq: None,
+            },
+            token_manager,
+            transport,
+        );
+
+        let err = client
+            .build_post_request(
+                "/api/v1/orders",
+                &PostProbeRequest {
+                    symbol: "AAPL".to_string(),
+                    quantity: serde_json::json!("1"),
+                },
+                true,
+                true,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().starts_with("validation error:"), "{err}");
+        assert!(requests.lock().is_empty());
     }
     #[derive(Debug, serde::Deserialize, PartialEq)]
     struct TypedProbe {

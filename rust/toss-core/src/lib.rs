@@ -12,3 +12,6 @@ pub mod stock_info;
 pub mod transport;
 
 pub use error::{Result, TossError};
+pub use models::order::{
+    OrderCreateRequest, OrderModifyRequest, OrderResponse, OrderSide, OrderType, TimeInForce,
+};
