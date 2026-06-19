@@ -2,7 +2,7 @@ use std::io::Write;
 
 use anyhow::Result;
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use toss_core::TossError;
 use toss_core::client::TossClient;
 use toss_core::config::{self, AppConfig};
@@ -64,20 +64,20 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
         cli::Command::Price(args) => {
             let client = TossClient::new(app_config)?;
             let symbols = args.symbols.as_deref().unwrap_or(&args.symbol);
-            let value = market_data::prices_json(&client, symbols).await?;
+            let value = serde_json::to_value(market_data::prices(&client, symbols).await?)?;
             write_output(output_format, command_name, value, writer)
         }
         cli::Command::Quote(args) => {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
                 cli::QuoteCommand::Orderbook(arg) => {
-                    market_data::orderbook_json(&client, &arg.symbol).await?
+                    serde_json::to_value(market_data::orderbook(&client, &arg.symbol).await?)?
                 }
                 cli::QuoteCommand::Trades(arg) => {
-                    market_data::trades_json(&client, &arg.symbol).await?
+                    serde_json::to_value(market_data::trades(&client, &arg.symbol).await?)?
                 }
                 cli::QuoteCommand::Limits(arg) => {
-                    market_data::price_limits_json(&client, &arg.symbol).await?
+                    serde_json::to_value(market_data::price_limits(&client, &arg.symbol).await?)?
                 }
             };
             write_output(output_format, command_name, value, writer)
@@ -96,7 +96,7 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
                     if let Some(to) = args.to {
                         query.push(("to".to_string(), to));
                     }
-                    market_data::candles_json(&client, query).await?
+                    serde_json::to_value(market_data::candles(&client, query).await?)?
                 }
             };
             write_output(output_format, command_name, value, writer)
@@ -104,21 +104,31 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
         cli::Command::Stock(args) => {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
-                cli::StockCommand::Get(arg) => stock_info::stocks(&client, &arg.symbol).await?,
-                cli::StockCommand::Warnings(arg) => {
-                    stock_info::warnings(&client, &arg.symbol).await?
+                cli::StockCommand::Get(arg) => {
+                    serde_json::to_value(stock_info::stocks(&client, &arg.symbol).await?)?
                 }
-                cli::StockCommand::Search(arg) => stock_info::stocks(&client, &arg.symbols).await?,
+                cli::StockCommand::Warnings(arg) => {
+                    serde_json::to_value(stock_info::warnings(&client, &arg.symbol).await?)?
+                }
+                cli::StockCommand::Search(arg) => {
+                    serde_json::to_value(stock_info::stocks(&client, &arg.symbols).await?)?
+                }
             };
             write_output(output_format, command_name, value, writer)
         }
         cli::Command::Market(args) => {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
-                cli::MarketCommand::ExchangeRate => market_info::exchange_rate(&client).await?,
+                cli::MarketCommand::ExchangeRate => {
+                    serde_json::to_value(market_info::exchange_rate(&client).await?)?
+                }
                 cli::MarketCommand::Calendar(args) => match args.command {
-                    cli::CalendarCommand::Kr => market_info::kr_calendar(&client).await?,
-                    cli::CalendarCommand::Us => market_info::us_calendar(&client).await?,
+                    cli::CalendarCommand::Kr => {
+                        serde_json::to_value(market_info::kr_calendar(&client).await?)?
+                    }
+                    cli::CalendarCommand::Us => {
+                        serde_json::to_value(market_info::us_calendar(&client).await?)?
+                    }
                 },
             };
             write_output(output_format, command_name, value, writer)
@@ -135,35 +145,21 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
             }
             cli::AccountCommand::List => {
                 let client = TossClient::new(app_config)?;
-                let value = account::list(&client).await?;
+                let value = serde_json::to_value(account::list(&client).await?)?;
                 write_output(output_format, command_name, value, writer)
             }
         },
         cli::Command::Holdings => {
             let client = TossClient::new(app_config)?;
-            let value = asset::holdings(&client).await?;
+            let value = serde_json::to_value(asset::holdings(&client).await?)?;
             write_output(output_format, command_name, value, writer)
         }
     }
 }
-
-fn run_config(
+fn write_output(
     output_format: OutputFormat,
     command: &str,
-    app_config: &AppConfig,
-    writer: &mut dyn Write,
-) -> Result<()> {
-    let data = json!({
-        "client_id": mask_client_id(&app_config.client_id),
-        "account_seq": app_config.account_seq,
-    });
-    write_output(output_format, command, data, writer)
-}
-
-fn write_output<T: Serialize>(
-    output_format: OutputFormat,
-    command: &str,
-    data: T,
+    data: Value,
     writer: &mut dyn Write,
 ) -> Result<()> {
     match output_format {
@@ -179,7 +175,7 @@ fn write_output<T: Serialize>(
             writeln!(&mut *writer)?;
         }
         OutputFormat::Text => {
-            let value = serde_json::to_value(data)?;
+            let value = data;
             if command == "config" {
                 render::write_key_values(
                     writer,
@@ -204,6 +200,19 @@ fn write_output<T: Serialize>(
         }
     }
     Ok(())
+}
+
+fn run_config(
+    output_format: OutputFormat,
+    command: &str,
+    app_config: &AppConfig,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let data = json!({
+        "client_id": mask_client_id(&app_config.client_id),
+        "account_seq": app_config.account_seq,
+    });
+    write_output(output_format, command, data, writer)
 }
 
 pub fn write_json_error(writer: &mut dyn Write, command: &str, err: &anyhow::Error) -> Result<()> {

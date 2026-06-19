@@ -88,6 +88,14 @@ fn parses_quote_orderbook_command() {
 }
 
 #[test]
+fn rejects_order_create_modify_cancel_subcommands() {
+    for command in ["create", "modify", "cancel"] {
+        let err = Cli::try_parse_from(["toss", "order", command]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+    }
+}
+
+#[test]
 fn runs_config_command_through_binary() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.yaml");
@@ -104,9 +112,12 @@ fn runs_config_command_through_binary() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("\"ok\":true"));
-    assert!(stdout.contains("\"account_seq\":5"));
-    assert!(!stdout.contains("secret-xyz"));
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], true);
+    assert_eq!(envelope["command"], "config");
+    assert_eq!(envelope["data"]["client_id"], "clie****-abc");
+    assert_eq!(envelope["data"]["account_seq"], 5);
+    assert!(envelope["data"].get("client_secret").is_none());
 }
 
 #[test]
