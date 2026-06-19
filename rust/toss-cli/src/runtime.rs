@@ -159,9 +159,14 @@ async fn run_client_command<T: Transport>(
                     )
                     .await?;
                     dry_run_output(request)?
+                } else if args.confirm {
+                    serde_json::to_value(
+                        order::create(client, &build_order_create_request(&args, CoreOrderSide::BUY))
+                            .await?,
+                    )?
                 } else {
                     return Err(toss_core::TossError::Validation(
-                        "mutating order commands require --dry-run or --confirm".to_string(),
+                        "live order commands require --confirm or use --dry-run".to_string(),
                     )
                     .into());
                 }
@@ -174,9 +179,14 @@ async fn run_client_command<T: Transport>(
                     )
                     .await?;
                     dry_run_output(request)?
+                } else if args.confirm {
+                    serde_json::to_value(
+                        order::create(client, &build_order_create_request(&args, CoreOrderSide::SELL))
+                            .await?,
+                    )?
                 } else {
                     return Err(toss_core::TossError::Validation(
-                        "mutating order commands require --dry-run or --confirm".to_string(),
+                        "live order commands require --confirm or use --dry-run".to_string(),
                     )
                     .into());
                 }
@@ -190,9 +200,14 @@ async fn run_client_command<T: Transport>(
                     )
                     .await?;
                     dry_run_output(request)?
+                } else if args.confirm {
+                    serde_json::to_value(
+                        order::modify(client, &args.order_id, &build_order_modify_request(&args))
+                            .await?,
+                    )?
                 } else {
                     return Err(toss_core::TossError::Validation(
-                        "mutating order commands require --dry-run or --confirm".to_string(),
+                        "live order commands require --confirm or use --dry-run".to_string(),
                     )
                     .into());
                 }
@@ -201,9 +216,11 @@ async fn run_client_command<T: Transport>(
                 if args.dry_run {
                     let request = order::build_cancel_dry_run(client, &args.order_id).await?;
                     dry_run_output(request)?
+                } else if args.confirm {
+                    serde_json::to_value(order::cancel(client, &args.order_id).await?)?
                 } else {
                     return Err(toss_core::TossError::Validation(
-                        "mutating order commands require --dry-run or --confirm".to_string(),
+                        "live order commands require --confirm or use --dry-run".to_string(),
                     )
                     .into());
                 }
@@ -650,6 +667,81 @@ mod tests {
             assert!(requests.lock().unwrap().is_empty(), "{envelope}");
         }
     }
+    #[tokio::test]
+    async fn order_buy_with_confirm_dispatches_live_wrapper() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": {
+                        "orderId": "order-789"
+                    }
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "buy-live", Some(42));
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "order",
+            order_buy_command(false, true),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+        assert_eq!(envelope["command"], "order");
+        assert_eq!(envelope["data"], json!({ "orderId": "order-789" }));
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Post);
+        assert_eq!(captured[1].path, "/api/v1/orders");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(captured[1].body.as_ref().unwrap())
+                .unwrap(),
+            json!({
+                "clientOrderId": "client-1",
+                "symbol": "AAPL",
+                "side": "BUY",
+                "orderType": "LIMIT",
+                "quantity": "1",
+                "price": "180",
+                "confirmHighValueOrder": true
+            })
+        );
+    }
+
+    #[test]
+    fn build_order_create_request_omits_confirm_high_value_order_when_flag_is_off() {
+        let request = super::build_order_create_request(
+            &cli::OrderCreateArgs {
+                symbol: "AAPL".to_string(),
+                qty: Some("1".to_string()),
+                amount: None,
+                order_type: cli::OrderType::Limit,
+                price: Some("180".to_string()),
+                client_order_id: Some("client-1".to_string()),
+                dry_run: true,
+                confirm: false,
+                confirm_high_value_order: false,
+            },
+            super::CoreOrderSide::BUY,
+        );
+
+        let value = serde_json::to_value(request).unwrap();
+        assert_eq!(value["clientOrderId"], "client-1");
+        assert!(value.get("confirmHighValueOrder").is_none(), "{value}");
+    }
+
 
     #[tokio::test]
     async fn order_buying_power_dispatches_through_wrapper() {

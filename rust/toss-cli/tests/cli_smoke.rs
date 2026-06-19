@@ -406,6 +406,7 @@ fn runs_order_buy_dry_run_command_through_binary() {
             "client-1",
             "--confirm-high-value-order",
             "--dry-run",
+            "--confirm",
         ])
         .output()
         .unwrap();
