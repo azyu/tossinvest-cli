@@ -74,7 +74,7 @@ Mutating order commands support `--dry-run` for smoke checks. Live mutating orde
 ```bash
 toss order buy --symbol AAPL --qty 1 --type limit --price 180 --client-order-id client-123 --dry-run
 toss order buy --symbol AAPL --qty 1 --type limit --price 180 --confirm
-toss order modify ORD-123 --qty 2 --type limit --price 181 --confirm-high-value-order
+toss order modify ORD-123 --qty 2 --type limit --price 181 --confirm --confirm-high-value-order
 toss order cancel ORD-123 --dry-run
 ```
 
