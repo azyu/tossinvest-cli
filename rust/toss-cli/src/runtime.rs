@@ -3,10 +3,10 @@ use std::io::Write;
 use anyhow::Result;
 use serde::Serialize;
 use serde_json::json;
+use toss_core::TossError;
+use toss_core::client::TossClient;
 use toss_core::config::{self, AppConfig};
 use toss_core::{account, asset, market_data, market_info, stock_info};
-use toss_core::client::TossClient;
-use toss_core::TossError;
 
 use crate::cli::{self, OutputFormat};
 use crate::render;
@@ -53,7 +53,12 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
             cli::AuthCommand::Token => {
                 let client = TossClient::new(app_config)?;
                 client.check_token().await?;
-                write_output(output_format, command_name, json!({ "token_check": "ok" }), writer)
+                write_output(
+                    output_format,
+                    command_name,
+                    json!({ "token_check": "ok" }),
+                    writer,
+                )
             }
         },
         cli::Command::Price(args) => {
@@ -65,9 +70,13 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
         cli::Command::Quote(args) => {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
-                cli::QuoteCommand::Orderbook(arg) => market_data::orderbook(&client, &arg.symbol).await?,
+                cli::QuoteCommand::Orderbook(arg) => {
+                    market_data::orderbook(&client, &arg.symbol).await?
+                }
                 cli::QuoteCommand::Trades(arg) => market_data::trades(&client, &arg.symbol).await?,
-                cli::QuoteCommand::Limits(arg) => market_data::price_limits(&client, &arg.symbol).await?,
+                cli::QuoteCommand::Limits(arg) => {
+                    market_data::price_limits(&client, &arg.symbol).await?
+                }
             };
             write_output(output_format, command_name, value, writer)
         }
@@ -94,7 +103,9 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
             let client = TossClient::new(app_config)?;
             let value = match args.command {
                 cli::StockCommand::Get(arg) => stock_info::stocks(&client, &arg.symbol).await?,
-                cli::StockCommand::Warnings(arg) => stock_info::warnings(&client, &arg.symbol).await?,
+                cli::StockCommand::Warnings(arg) => {
+                    stock_info::warnings(&client, &arg.symbol).await?
+                }
                 cli::StockCommand::Search(arg) => stock_info::stocks(&client, &arg.symbols).await?,
             };
             write_output(output_format, command_name, value, writer)
@@ -155,7 +166,14 @@ fn write_output<T: Serialize>(
 ) -> Result<()> {
     match output_format {
         OutputFormat::Json => {
-            serde_json::to_writer(&mut *writer, &SuccessEnvelope { ok: true, command, data })?;
+            serde_json::to_writer(
+                &mut *writer,
+                &SuccessEnvelope {
+                    ok: true,
+                    command,
+                    data,
+                },
+            )?;
             writeln!(&mut *writer)?;
         }
         OutputFormat::Text => {
@@ -164,7 +182,10 @@ fn write_output<T: Serialize>(
                 render::write_key_values(
                     writer,
                     &[
-                        ("client_id", value["client_id"].as_str().unwrap_or("-").to_string()),
+                        (
+                            "client_id",
+                            value["client_id"].as_str().unwrap_or("-").to_string(),
+                        ),
                         (
                             "account_seq",
                             value["account_seq"]
@@ -185,7 +206,14 @@ fn write_output<T: Serialize>(
 
 pub fn write_json_error(writer: &mut dyn Write, command: &str, err: &anyhow::Error) -> Result<()> {
     let error = classify_error(err);
-    serde_json::to_writer(&mut *writer, &ErrorEnvelope { ok: false, command, error })?;
+    serde_json::to_writer(
+        &mut *writer,
+        &ErrorEnvelope {
+            ok: false,
+            command,
+            error,
+        },
+    )?;
     writeln!(&mut *writer)?;
     Ok(())
 }
@@ -259,5 +287,9 @@ fn mask_client_id(client_id: &str) -> String {
         return "****".to_string();
     }
 
-    format!("{}****{}", &client_id[..4], &client_id[client_id.len() - 4..])
+    format!(
+        "{}****{}",
+        &client_id[..4],
+        &client_id[client_id.len() - 4..]
+    )
 }

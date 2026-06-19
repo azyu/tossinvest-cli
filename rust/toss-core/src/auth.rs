@@ -260,7 +260,8 @@ mod tests {
             response: HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
             },
         };
         let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
@@ -309,7 +310,8 @@ mod tests {
             response: HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
             },
         };
         let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
@@ -328,7 +330,13 @@ mod tests {
         assert_eq!(captured[0].method, HttpMethod::Post);
         assert_eq!(captured[0].path, "/oauth2/token");
         assert!(captured[0].headers.iter().any(|h| h.name == "content-type" && h.value == "application/x-www-form-urlencoded"));
-        assert_eq!(captured[0].body.as_deref(), Some(b"grant_type=client_credentials&client_id=client-1&client_secret=secret-1".as_slice()));
+        assert_eq!(
+            captured[0].body.as_deref(),
+            Some(
+                b"grant_type=client_credentials&client_id=client-1&client_secret=secret-1"
+                    .as_slice()
+            )
+        );
     }
 
     #[tokio::test]
@@ -338,8 +346,12 @@ mod tests {
             requests: requests.clone(),
             response: HttpResponse {
                 status: 200,
-                headers: vec![Header { name: "x-test".to_string(), value: "ok".to_string() }],
-                body: br#"{"access_token":"token-2","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                headers: vec![Header {
+                    name: "x-test".to_string(),
+                    value: "ok".to_string(),
+                }],
+                body: br#"{"access_token":"token-2","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
             },
         };
         let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
@@ -370,14 +382,16 @@ mod tests {
                 response: HttpResponse {
                     status: 200,
                     headers: Vec::new(),
-                    body: br#"{"access_token":"token-a","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                    body: br#"{"access_token":"token-a","token_type":"Bearer","expires_in":86400}"#
+                        .to_vec(),
                 },
             },
         );
         assert_eq!(first_manager.get_token().await.unwrap(), "token-a");
         assert_eq!(first_requests.lock().len(), 1);
 
-        let cached: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&cache_path).unwrap()).unwrap();
+        let cached: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&cache_path).unwrap()).unwrap();
         assert_eq!(cached["client_id"], "client-a");
         assert!(cached.get("client_secret").is_none(), "{cached}");
 
@@ -390,7 +404,8 @@ mod tests {
                 response: HttpResponse {
                     status: 200,
                     headers: Vec::new(),
-                    body: br#"{"access_token":"token-b","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                    body: br#"{"access_token":"token-b","token_type":"Bearer","expires_in":86400}"#
+                        .to_vec(),
                 },
             },
         );

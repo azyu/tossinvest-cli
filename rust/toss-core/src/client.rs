@@ -176,7 +176,8 @@ mod tests {
             HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
             },
             HttpResponse {
                 status: 200,
@@ -184,7 +185,10 @@ mod tests {
                 body: br#"{"result":{"items":[{"symbol":"AAPL"}]}}"#.to_vec(),
             },
         ]));
-        let transport = QueueTransport { requests: requests.clone(), responses };
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses,
+        };
         let tempdir = tempfile::tempdir().unwrap();
         let token_manager = TokenManager::new_with_cache_path(
             "client".to_string(),
@@ -202,13 +206,26 @@ mod tests {
             transport,
         );
 
-        let value = client.get_json("/api/v1/holdings", Vec::new(), true).await.unwrap();
+        let value = client
+            .get_json("/api/v1/holdings", Vec::new(), true)
+            .await
+            .unwrap();
         assert_eq!(value["items"][0]["symbol"], "AAPL");
 
         let captured = requests.lock();
         let api_request = &captured[1];
-        assert!(api_request.headers.iter().any(|h| h.name == "authorization" && h.value == "Bearer token-1"));
-        assert!(api_request.headers.iter().any(|h| h.name == "X-Tossinvest-Account" && h.value == "77"));
+        assert!(
+            api_request
+                .headers
+                .iter()
+                .any(|h| h.name == "authorization" && h.value == "Bearer token-1")
+        );
+        assert!(
+            api_request
+                .headers
+                .iter()
+                .any(|h| h.name == "X-Tossinvest-Account" && h.value == "77")
+        );
     }
 
     #[tokio::test]
@@ -235,7 +252,10 @@ mod tests {
             transport,
         );
 
-        let err = client.get_json("/api/v1/holdings", Vec::new(), true).await.unwrap_err();
+        let err = client
+            .get_json("/api/v1/holdings", Vec::new(), true)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("account sequence is required"));
     }
 }

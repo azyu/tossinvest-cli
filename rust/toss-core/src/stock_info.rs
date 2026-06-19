@@ -1,8 +1,8 @@
 use serde_json::Value;
 
+use crate::Result;
 use crate::client::TossClient;
 use crate::transport::Transport;
-use crate::Result;
 
 pub async fn stocks<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Value> {
     client
@@ -16,7 +16,11 @@ pub async fn stocks<T: Transport>(client: &TossClient<T>, symbols: &str) -> Resu
 
 pub async fn warnings<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
     client
-        .get_json(&format!("/api/v1/stocks/{symbol}/warnings"), Vec::new(), false)
+        .get_json(
+            &format!("/api/v1/stocks/{symbol}/warnings"),
+            Vec::new(),
+            false,
+        )
         .await
 }
 
@@ -51,7 +55,10 @@ mod tests {
         requests: Arc<Mutex<Vec<HttpRequest>>>,
         responses: Arc<Mutex<Vec<HttpResponse>>>,
     ) -> TossClient<QueueTransport> {
-        let transport = QueueTransport { requests, responses };
+        let transport = QueueTransport {
+            requests,
+            responses,
+        };
         let tempdir = tempfile::tempdir().unwrap();
         let token_manager = TokenManager::new_with_cache_path(
             "client".to_string(),
@@ -74,9 +81,22 @@ mod tests {
     async fn routes_stock_info_requests() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(vec![
-            HttpResponse { status: 200, headers: Vec::new(), body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec() },
-            HttpResponse { status: 200, headers: Vec::new(), body: br#"{"result":{}}"#.to_vec() },
-            HttpResponse { status: 200, headers: Vec::new(), body: br#"{"result":{}}"#.to_vec() },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":{}}"#.to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":{}}"#.to_vec(),
+            },
         ]));
         let client = client(requests.clone(), responses);
 
@@ -86,7 +106,10 @@ mod tests {
         let captured = requests.lock();
         assert_eq!(captured.len(), 3);
         assert_eq!(captured[1].path, "/api/v1/stocks");
-        assert_eq!(captured[1].query, vec![("symbols".to_string(), "AAPL,MSFT".to_string())]);
+        assert_eq!(
+            captured[1].query,
+            vec![("symbols".to_string(), "AAPL,MSFT".to_string())]
+        );
         assert_eq!(captured[2].path, "/api/v1/stocks/AAPL/warnings");
         assert!(captured[2].query.is_empty());
     }

@@ -1,8 +1,8 @@
 use serde_json::Value;
 
+use crate::Result;
 use crate::client::TossClient;
 use crate::transport::Transport;
-use crate::Result;
 
 pub async fn list<T: Transport>(client: &TossClient<T>) -> Result<Value> {
     client.get_json("/api/v1/accounts", Vec::new(), false).await
@@ -39,7 +39,10 @@ mod tests {
         requests: Arc<Mutex<Vec<HttpRequest>>>,
         responses: Arc<Mutex<Vec<HttpResponse>>>,
     ) -> TossClient<QueueTransport> {
-        let transport = QueueTransport { requests, responses };
+        let transport = QueueTransport {
+            requests,
+            responses,
+        };
         let tempdir = tempfile::tempdir().unwrap();
         let token_manager = TokenManager::new_with_cache_path(
             "client".to_string(),
@@ -62,9 +65,18 @@ mod tests {
     async fn routes_account_list_request() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(vec![
-            HttpResponse { status: 200, headers: Vec::new(), body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#.to_vec() },
-            HttpResponse { status: 200, headers: Vec::new(), body: br#"{"result":{}}"#.to_vec() },
-        ]) );
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":{}}"#.to_vec(),
+            },
+        ]));
         let client = client(requests.clone(), responses);
 
         list(&client).await.unwrap();

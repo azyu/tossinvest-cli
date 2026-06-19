@@ -2,7 +2,10 @@ use std::fs;
 use std::process::Command as ProcessCommand;
 
 use clap::Parser;
-use toss_cli::cli::{CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OutputFormat, QuoteCommand, StockCommand};
+use toss_cli::cli::{
+    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OutputFormat, QuoteCommand,
+    StockCommand,
+};
 
 #[test]
 fn parses_json_price_command() {
@@ -30,8 +33,11 @@ fn parses_quote_orderbook_command() {
 fn runs_config_command_through_binary() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.yaml");
-    fs::write(&config, "client_id: client-abc\nclient_secret: secret-xyz\naccount_seq: 5\n")
-        .unwrap();
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\naccount_seq: 5\n",
+    )
+    .unwrap();
 
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
         .args(["--config", config.to_str().unwrap(), "--json", "config"])
@@ -49,7 +55,11 @@ fn runs_config_command_through_binary() {
 fn runs_account_use_command_through_binary() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.yaml");
-    fs::write(&config, "client_id: client-abc\nclient_secret: secret-xyz\n").unwrap();
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\n",
+    )
+    .unwrap();
 
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
         .args([
@@ -77,7 +87,16 @@ fn runs_account_use_command_through_binary() {
 
 #[test]
 fn parses_chart_candles_command() {
-    let cli = Cli::parse_from(["toss", "chart", "candles", "AAPL", "--interval", "1d", "--from", "2026-01-01"]);
+    let cli = Cli::parse_from([
+        "toss",
+        "chart",
+        "candles",
+        "AAPL",
+        "--interval",
+        "1d",
+        "--from",
+        "2026-01-01",
+    ]);
     match cli.command {
         Command::Chart(args) => match args.command {
             ChartCommand::Candles(args) => {

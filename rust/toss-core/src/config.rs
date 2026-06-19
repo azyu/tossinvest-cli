@@ -98,7 +98,7 @@ fn default_config_path(config_path: Option<&Path>) -> Result<PathBuf> {
 mod tests {
     use std::fs;
 
-    use super::{load, read_file_config, save_account_seq, AppConfig};
+    use super::{AppConfig, load, read_file_config, save_account_seq};
 
     #[test]
     fn debug_redacts_client_secret() {

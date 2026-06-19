@@ -79,6 +79,10 @@ impl Transport for ReqwestTransport {
             })
             .collect();
         let body = response.bytes().await?.to_vec();
-        Ok(HttpResponse { status, headers, body })
+        Ok(HttpResponse {
+            status,
+            headers,
+            body,
+        })
     }
 }

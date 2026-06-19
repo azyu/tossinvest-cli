@@ -11,9 +11,17 @@ pub enum OutputFormat {
 #[derive(Debug, Parser)]
 #[command(name = "toss", about = "Toss Securities Open API CLI")]
 pub struct Cli {
-    #[arg(long, global = true, help = "config file (default: ~/.config/tossinvest/config.yaml)")]
+    #[arg(
+        long,
+        global = true,
+        help = "config file (default: ~/.config/tossinvest/config.yaml)"
+    )]
     pub config: Option<PathBuf>,
-    #[arg(long, global = true, help = "accountSeq override for account-bound commands")]
+    #[arg(
+        long,
+        global = true,
+        help = "accountSeq override for account-bound commands"
+    )]
     pub account: Option<String>,
     #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Text)]
     pub output: OutputFormat,

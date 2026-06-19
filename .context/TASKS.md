@@ -9,7 +9,7 @@ updated: 2026-06-18
 
 ## Active Work Tree
 
-### [ ] Phase 1: Read-only Tossinvest CLI
+### [x] Phase 1: Read-only Tossinvest CLI
 
 Goal: implement the approved Phase 1 plan for a read-only Toss Securities Open API CLI.
 
@@ -22,7 +22,7 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 | [x] | Authenticated client and endpoint wrappers | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core` → 17 passed. Commit `ca0de61`. |
 | [x] | CLI parser and output runtime | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-cli` → 4 passed. Commit `18cf072`. |
 | [x] | Wire read-only commands | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml` → 23 passed. Commit `a2e5097`. |
-| [ ] | Documentation and final verification | Add README, run `cargo fmt`, `cargo test`, `cargo build`, and config smoke command from the plan. |
+| [x] | Documentation and final verification | README added; verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml` → 23 passed, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config`. |
 
 ## Blocked / Deferred
 
@@ -38,3 +38,4 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 | 2026-06-18 | Design spec approved | `docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md`, commit `06ef6db` |
 | 2026-06-18 | Phase 1 implementation plan written | `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`, commit `b9005aa` |
 | 2026-06-18 | `.context` structure adopted | `PROJECT.md`, `STEERING.md`, `TASKS.md` |
+| 2026-06-19 | Documentation and final verification | `README.md`, `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml`, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config` |
