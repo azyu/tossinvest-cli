@@ -2,7 +2,10 @@ use serde::Serialize;
 
 use crate::Result;
 use crate::client::TossClient;
-use crate::models::order::{OrderCreateRequest, OrderModifyRequest, OrderResponse};
+use crate::models::order::{
+    OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
+    OrderResponse,
+};
 use crate::transport::{HttpRequest, Transport};
 
 #[derive(Serialize)]
@@ -32,6 +35,25 @@ pub async fn cancel<T: Transport>(client: &TossClient<T>, order_id: &str) -> Res
             &EmptyRequest {},
             true,
         )
+        .await
+}
+
+pub async fn list<T: Transport>(
+    client: &TossClient<T>,
+    status: &str,
+) -> Result<OrderHistoryListResponse> {
+    client
+        .get_typed(
+            "/api/v1/orders",
+            vec![("status".to_string(), status.to_string())],
+            true,
+        )
+        .await
+}
+
+pub async fn show<T: Transport>(client: &TossClient<T>, order_id: &str) -> Result<OrderHistoryOrder> {
+    client
+        .get_typed(&format!("/api/v1/orders/{order_id}"), Vec::new(), true)
         .await
 }
 
@@ -82,14 +104,16 @@ mod tests {
     use parking_lot::Mutex;
     use serde_json::{Value, json};
 
-    use super::{
-        build_cancel_dry_run, build_create_dry_run, build_modify_dry_run, cancel, create, modify,
-    };
     use crate::auth::TokenManager;
     use crate::client::TossClient;
     use crate::config::AppConfig;
+    use super::{
+        build_cancel_dry_run, build_create_dry_run, build_modify_dry_run, cancel, create, list,
+        modify, show,
+    };
     use crate::models::order::{
-        OrderCreateRequest, OrderModifyRequest, OrderSide, OrderType, TimeInForce,
+        OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
+        OrderSide, OrderType, TimeInForce,
     };
     use crate::transport::{HttpMethod, HttpRequest, HttpResponse, Transport};
 
@@ -390,5 +414,120 @@ mod tests {
         assert_eq!(account_header(&request), Some("42"));
         assert_eq!(authorization_header(&request), None);
         assert_eq!(request_body_json(&request), json!({}));
+    }
+    #[tokio::test]
+    async fn list_gets_open_orders_with_account_header() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: json!({
+                    "result": {
+                        "orders": [
+                            {
+                                "orderId": "order-123",
+                                "symbol": "AAPL",
+                                "side": "BUY",
+                                "orderType": "LIMIT",
+                                "timeInForce": "DAY",
+                                "status": "OPEN",
+                                "price": "180",
+                                "quantity": "1",
+                                "orderAmount": null,
+                                "currency": "USD",
+                                "orderedAt": "2026-03-29T09:30:00+09:00",
+                                "canceledAt": null,
+                                "execution": {
+                                    "filledQuantity": "0",
+                                    "averageFilledPrice": null,
+                                    "filledAmount": null,
+                                    "commission": null,
+                                    "tax": null,
+                                    "filledAt": null,
+                                    "settlementDate": null
+                                }
+                            }
+                        ],
+                        "nextCursor": null,
+                        "hasNext": false
+                    }
+                })
+                .to_string()
+                .into_bytes(),
+            },
+        ]));
+        let client = client(requests.clone(), responses, "list-live");
+
+        let result = list(&client, "OPEN").await.expect("list orders");
+        assert_eq!(result.orders.len(), 1);
+        assert_eq!(result.orders[0].order_id, "order-123");
+
+        let captured = requests.lock();
+        assert_eq!(captured.len(), 2, "expected token fetch and order request");
+        let request = &captured[1];
+        assert_eq!(request.method, HttpMethod::Get);
+        assert_eq!(request.path, "/api/v1/orders");
+        assert_eq!(
+            request.query,
+            vec![("status".to_string(), "OPEN".to_string())]
+        );
+        assert_eq!(account_header(request), Some("42"));
+        assert_eq!(authorization_header(request), Some("Bearer token-1"));
+    }
+
+    #[tokio::test]
+    async fn show_gets_order_detail_with_account_header() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: json!({
+                    "result": {
+                        "orderId": "order-123",
+                        "symbol": "AAPL",
+                        "side": "BUY",
+                        "orderType": "LIMIT",
+                        "timeInForce": "DAY",
+                        "status": "FILLED",
+                        "price": "180",
+                        "quantity": "1",
+                        "orderAmount": null,
+                        "currency": "USD",
+                        "orderedAt": "2026-03-29T09:30:00+09:00",
+                        "canceledAt": null,
+                        "execution": {
+                            "filledQuantity": "1",
+                            "averageFilledPrice": "180",
+                            "filledAmount": "180",
+                            "commission": "0.01",
+                            "tax": "0",
+                            "filledAt": "2026-03-29T09:30:05+09:00",
+                            "settlementDate": null
+                        }
+                    }
+                })
+                .to_string()
+                .into_bytes(),
+            },
+        ]));
+        let client = client(requests.clone(), responses, "show-live");
+
+        let result = show(&client, "order-123").await.expect("show order");
+        assert_eq!(result.order_id, "order-123");
+        assert_eq!(result.status, "FILLED");
+        assert_eq!(result.execution.filled_quantity, "1");
+
+        let captured = requests.lock();
+        assert_eq!(captured.len(), 2, "expected token fetch and order request");
+        let request = &captured[1];
+        assert_eq!(request.method, HttpMethod::Get);
+        assert_eq!(request.path, "/api/v1/orders/order-123");
+        assert!(request.query.is_empty());
+        assert_eq!(account_header(request), Some("42"));
+        assert_eq!(authorization_header(request), Some("Bearer token-1"));
     }
 }

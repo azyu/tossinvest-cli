@@ -86,6 +86,8 @@ pub enum OrderCommand {
     Sell(OrderCreateArgs),
     Modify(OrderModifyArgs),
     Cancel(OrderCancelArgs),
+    List(OrderListArgs),
+    Show(OrderShowArgs),
     BuyingPower(OrderBuyingPowerArgs),
     SellableQuantity(OrderSellableQuantityArgs),
     Commissions,
@@ -137,6 +139,32 @@ pub struct OrderCancelArgs {
     pub dry_run: bool,
     #[arg(long)]
     pub confirm: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderListArgs {
+    #[arg(long, value_enum)]
+    pub status: OrderHistoryStatus,
+}
+
+#[derive(Debug, Args)]
+pub struct OrderShowArgs {
+    pub order_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum OrderHistoryStatus {
+    Open,
+    Closed,
+}
+
+impl std::fmt::Display for OrderHistoryStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Open => "OPEN",
+            Self::Closed => "CLOSED",
+        })
+    }
 }
 
 #[derive(Debug, Args)]

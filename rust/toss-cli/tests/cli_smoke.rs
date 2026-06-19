@@ -3,8 +3,8 @@ use std::process::Command as ProcessCommand;
 
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
-    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand, OrderType,
-    OutputFormat, QuoteCommand, StockCommand,
+    CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand,
+    OrderHistoryStatus, OrderType, OutputFormat, QuoteCommand, StockCommand,
 };
 
 fn assert_json_parse_error(output: std::process::Output, command: &str) {
@@ -136,6 +136,26 @@ fn parses_order_read_only_commands() {
     }
 }
 
+#[test]
+fn parses_order_history_commands() {
+    let cli = Cli::parse_from(["toss", "order", "list", "--status", "open"]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::List(args) => assert_eq!(args.status, OrderHistoryStatus::Open),
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let cli = Cli::parse_from(["toss", "order", "show", "order-123"]);
+    match cli.command {
+        Command::Order(args) => match args.command {
+            OrderCommand::Show(args) => assert_eq!(args.order_id, "order-123"),
+            other => panic!("unexpected order command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
 #[test]
 fn parses_order_mutating_commands_with_safety_flags() {
     let cli = Cli::parse_from([

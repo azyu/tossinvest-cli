@@ -85,6 +85,60 @@ pub struct OrderResponse {
     pub extra: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderHistoryExecution {
+    pub filled_quantity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_filled_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filled_amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commission: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tax: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settlement_date: Option<String>,
+    #[serde(flatten, default)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderHistoryOrder {
+    pub order_id: String,
+    pub symbol: String,
+    pub side: String,
+    pub order_type: String,
+    pub time_in_force: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<String>,
+    pub quantity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_amount: Option<String>,
+    pub currency: String,
+    pub ordered_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canceled_at: Option<String>,
+    pub execution: OrderHistoryExecution,
+    #[serde(flatten, default)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderHistoryListResponse {
+    pub orders: Vec<OrderHistoryOrder>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub has_next: bool,
+    #[serde(flatten, default)]
+    pub extra: BTreeMap<String, Value>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,5 +234,75 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.order_id, "order-1");
+    }
+
+    #[test]
+    fn deserializes_order_history_order_broadly() {
+        let response: OrderHistoryOrder = serde_json::from_value(json!({
+            "orderId": "order-1",
+            "symbol": "AAPL",
+            "side": "BUY",
+            "orderType": "LIMIT",
+            "timeInForce": "DAY",
+            "status": "OPEN",
+            "price": "180",
+            "quantity": "1",
+            "orderAmount": null,
+            "currency": "USD",
+            "orderedAt": "2026-03-29T09:30:00+09:00",
+            "canceledAt": null,
+            "execution": {
+                "filledQuantity": "0",
+                "averageFilledPrice": null,
+                "filledAmount": null,
+                "commission": null,
+                "tax": null,
+                "filledAt": null,
+                "settlementDate": null
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(response.order_id, "order-1");
+        assert_eq!(response.status, "OPEN");
+        assert_eq!(response.execution.filled_quantity, "0");
+    }
+
+    #[test]
+    fn deserializes_order_history_list_response_broadly() {
+        let response: OrderHistoryListResponse = serde_json::from_value(json!({
+            "orders": [
+                {
+                    "orderId": "order-1",
+                    "symbol": "AAPL",
+                    "side": "BUY",
+                    "orderType": "LIMIT",
+                    "timeInForce": "DAY",
+                    "status": "OPEN",
+                    "price": "180",
+                    "quantity": "1",
+                    "orderAmount": null,
+                    "currency": "USD",
+                    "orderedAt": "2026-03-29T09:30:00+09:00",
+                    "canceledAt": null,
+                    "execution": {
+                        "filledQuantity": "0",
+                        "averageFilledPrice": null,
+                        "filledAmount": null,
+                        "commission": null,
+                        "tax": null,
+                        "filledAt": null,
+                        "settlementDate": null
+                    }
+                }
+            ],
+            "nextCursor": null,
+            "hasNext": false
+        }))
+        .unwrap();
+
+        assert_eq!(response.orders.len(), 1);
+        assert_eq!(response.orders[0].order_id, "order-1");
+        assert!(!response.has_next);
     }
 }
