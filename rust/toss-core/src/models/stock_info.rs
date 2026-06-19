@@ -24,7 +24,8 @@ pub struct KrMarketDetail {
     pub liquidation_trading: bool,
     pub nxt_supported: bool,
     pub krx_trading_suspended: bool,
-    pub nxt_trading_suspended: bool,
+    #[serde(rename = "nxtTradingSuspended")]
+    pub nxt_trading_suspended: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

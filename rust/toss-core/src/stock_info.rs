@@ -204,4 +204,54 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].warning_type.0, "UNKNOWN_WARNING");
     }
+    #[test]
+    fn deserializes_omitted_or_null_nxt_trading_suspended() {
+        let omitted = serde_json::json!({
+            "symbol": "AAPL",
+            "name": "Apple",
+            "englishName": "APPLE INC",
+            "isinCode": "US0378331005",
+            "market": "NASDAQ",
+            "securityType": "STOCK",
+            "isCommonShare": true,
+            "status": "ACTIVE",
+            "currency": "USD",
+            "listDate": "1980-12-12",
+            "delistDate": null,
+            "sharesOutstanding": "1000000000",
+            "leverageFactor": null,
+            "koreanMarketDetail": {
+                "liquidationTrading": false,
+                "nxtSupported": true,
+                "krxTradingSuspended": false
+            }
+        });
+        let with_null = serde_json::json!({
+            "symbol": "AAPL",
+            "name": "Apple",
+            "englishName": "APPLE INC",
+            "isinCode": "US0378331005",
+            "market": "NASDAQ",
+            "securityType": "STOCK",
+            "isCommonShare": true,
+            "status": "ACTIVE",
+            "currency": "USD",
+            "listDate": "1980-12-12",
+            "delistDate": null,
+            "sharesOutstanding": "1000000000",
+            "leverageFactor": null,
+            "koreanMarketDetail": {
+                "liquidationTrading": false,
+                "nxtSupported": true,
+                "krxTradingSuspended": false,
+                "nxtTradingSuspended": null
+            }
+        });
+
+        let omitted: StockInfo = serde_json::from_value(omitted).unwrap();
+        let with_null: StockInfo = serde_json::from_value(with_null).unwrap();
+
+        assert_eq!(omitted.symbol, "AAPL");
+        assert_eq!(with_null.symbol, "AAPL");
+    }
 }
