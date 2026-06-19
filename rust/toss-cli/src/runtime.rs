@@ -64,7 +64,7 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
         cli::Command::Price(args) => {
             let client = TossClient::new(app_config)?;
             let symbols = args.symbols.as_deref().unwrap_or(&args.symbol);
-            let value = market_data::prices(&client, symbols).await?;
+            let value = market_data::prices_json(&client, symbols).await?;
             write_output(output_format, command_name, value, writer)
         }
         cli::Command::Quote(args) => {
@@ -96,7 +96,7 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
                     if let Some(to) = args.to {
                         query.push(("to".to_string(), to));
                     }
-                    market_data::candles(&client, query).await?
+                    market_data::candles_json(&client, query).await?
                 }
             };
             write_output(output_format, command_name, value, writer)
