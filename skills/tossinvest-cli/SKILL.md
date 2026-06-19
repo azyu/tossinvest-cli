@@ -69,7 +69,13 @@ Expected config shape:
 ```yaml
 client_id: "issued-client-id"
 client_secret: "issued-client-secret"
-account_seq: 1
+```
+
+Persist an account only when account-bound commands are needed:
+
+```bash
+toss account list
+toss account use 1
 ```
 
 Session-only environment alternative:
