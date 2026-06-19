@@ -59,6 +59,29 @@ toss account use 1
 toss holdings
 ```
 
+## Orders
+
+Read-only order-info commands:
+
+```bash
+toss order buying-power --currency USD
+toss order sellable-quantity --symbol AAPL
+toss order commissions
+```
+
+Mutating order commands support `--dry-run` for smoke checks. Live mutating order commands require `--confirm`.
+
+```bash
+toss order buy --symbol AAPL --qty 1 --type limit --price 180 --client-order-id client-123 --dry-run
+toss order buy --symbol AAPL --qty 1 --type limit --price 180 --confirm
+toss order modify ORD-123 --qty 2 --type limit --price 181 --confirm-high-value-order
+toss order cancel ORD-123 --dry-run
+```
+
+- `--client-order-id` is recommended for create-order idempotency.
+- `--confirm-high-value-order` maps to Toss `confirmHighValueOrder`.
+- There is no documented sandbox; assume production.
+
 ## Output
 
 Use `--json` or `--output json` for automation. Successful JSON output uses:
@@ -75,8 +98,8 @@ Error JSON output uses:
 
 ## Safety
 
-Phase 1 is read-only. Order creation, modification, and cancellation are intentionally not exposed yet.
 The CLI never prints `client_secret` or access tokens in normal output.
+
 ## Library core
 
 `toss-core` exposes typed read-only wrappers for the Phase 1 API surface. Financial values are represented as `serde_json::Value` or strings instead of floating-point numbers.

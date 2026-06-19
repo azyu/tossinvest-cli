@@ -161,8 +161,11 @@ async fn run_client_command<T: Transport>(
                     dry_run_output(request)?
                 } else if args.confirm {
                     serde_json::to_value(
-                        order::create(client, &build_order_create_request(&args, CoreOrderSide::BUY))
-                            .await?,
+                        order::create(
+                            client,
+                            &build_order_create_request(&args, CoreOrderSide::BUY),
+                        )
+                        .await?,
                     )?
                 } else {
                     return Err(toss_core::TossError::Validation(
@@ -181,8 +184,11 @@ async fn run_client_command<T: Transport>(
                     dry_run_output(request)?
                 } else if args.confirm {
                     serde_json::to_value(
-                        order::create(client, &build_order_create_request(&args, CoreOrderSide::SELL))
-                            .await?,
+                        order::create(
+                            client,
+                            &build_order_create_request(&args, CoreOrderSide::SELL),
+                        )
+                        .await?,
                     )?
                 } else {
                     return Err(toss_core::TossError::Validation(
@@ -741,7 +747,6 @@ mod tests {
         assert_eq!(value["clientOrderId"], "client-1");
         assert!(value.get("confirmHighValueOrder").is_none(), "{value}");
     }
-
 
     #[tokio::test]
     async fn order_buying_power_dispatches_through_wrapper() {

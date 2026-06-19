@@ -35,11 +35,14 @@ Goal: typed read-only wrappers, compatibility shims, and CLI migration are compl
 | [x] | Task 3: Typed read-only core wrappers | Complete. Verified by commit `81f4c20` and follow-up CLI/runtime compatibility commits `4988be8`, `ac35968`, `cfb0009`, and `495cc8e`. |
 | [x] | Task 4: CLI typed migration | Complete. Verified by commit `828506b` refactoring the CLI runtime to typed core. |
 | [x] | Task 5: Documentation and final verification | Complete. Verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml`, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config`. |
-## Blocked / Deferred
+### [x] Phase 3: Order-capable CLI
 
-| Status | Task | Context |
-|--------|------|---------|
-| [ ] | Phase 3 order-capable CLI | Deferred until typed core, dry-run, confirmation, idempotency, and order error tests are designed and implemented. |
+Goal: order-capable CLI with dry-run and confirmation safety.
+
+| Status | Task | Context / Verification |
+|--------|------|------------------------|
+| [x] | Task 6: Documentation, context, and final verification | Complete. Verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml`, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and smoke checks using a temp config plus dry-run. |
+
 
 ## Completed
 
@@ -53,3 +56,4 @@ Goal: typed read-only wrappers, compatibility shims, and CLI migration are compl
 | 2026-06-19 | Phase 2 Task 5 documentation, context, and final verification | `README.md`, `.context/PROJECT.md`, `.context/STEERING.md`, `.context/TASKS.md`, `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml`, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and `cargo run --manifest-path rust/Cargo.toml -p toss-cli --bin toss -- --config <temp-config> --json config` |
 | 2026-06-19 | Phase 3 Task 1 core POST client and order models | Complete. Verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml -p toss-core client::tests` → 6 passed, and `cargo test --manifest-path rust/Cargo.toml -p toss-core` → 39 passed. Commit `a05e748`. |
 | 2026-06-19 | Phase 3 Task 2 core order and order-info wrappers | Complete. Verified with `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml -p toss-core` → 48 passed. Commit `550b3f0`. |
+| 2026-06-19 | Phase 3 Task 6 documentation, context, and final verification | `README.md`, `.context/PROJECT.md`, `.context/STEERING.md`, `.context/TASKS.md`, `cargo fmt --all --manifest-path rust/Cargo.toml`, `cargo test --manifest-path rust/Cargo.toml`, `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`, and temp-config/dry-run smoke checks. |

@@ -5,9 +5,7 @@
 
 ## Current Priority
 
-Build Phase 3: order-capable CLI.
-
-Phase 2 final verification has passed; Phase 3 is now the active next step.
+Phase 3 order-capable CLI is implemented and final verification passed.
 ## Execution Mode
 
 File-based coordination.
@@ -20,7 +18,7 @@ File-based coordination.
 
 - OpenAPI JSON is the source of truth: `https://openapi.tossinvest.com/openapi-docs/latest/openapi.json`.
 - Follow the delivery order: read-only CLI → typed wrapper/library core → order-capable CLI.
-- Phase 1 excludes create, modify, and cancel order calls.
+- Mutating order commands require `--dry-run` for non-mutating smoke and `--confirm` for live execution; no documented sandbox/staging is assumed.
 - Do not copy KIS-specific TR-ID, hashkey, virtual/real environment, or WebSocket concepts.
 - Keep endpoint wrappers thin: build query/body, call client, parse `result`.
 - Do not use floating-point types for financial values; keep values as strings or `serde_json::Value` in Phase 1.
@@ -62,5 +60,6 @@ Phase 1 commands:
 ## Notes
 
 - Public Toss docs inspected so far show a single production server: `https://openapi.tossinvest.com`.
-- Sandbox/staging support is not assumed.
+- Mutating order commands require `--dry-run` for non-mutating smoke and `--confirm` for live execution.
+- No documented sandbox/staging support is assumed; live order traffic is treated as production.
 - JWKS is mentioned in high-level orientation but was not confirmed in the API reference index during design review.
