@@ -2,9 +2,12 @@ use serde_json::Value;
 
 use crate::Result;
 use crate::client::TossClient;
+use crate::models::market_data::{
+    CandlePageResponse, OrderbookResponse, PriceLimitResponse, PriceResponse, Trade,
+};
 use crate::transport::Transport;
 
-pub async fn prices<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Value> {
+pub async fn prices_json<T: Transport>(client: &TossClient<T>, symbols: &str) -> Result<Value> {
     client
         .get_json(
             "/api/v1/prices",
@@ -14,7 +17,7 @@ pub async fn prices<T: Transport>(client: &TossClient<T>, symbols: &str) -> Resu
         .await
 }
 
-pub async fn orderbook<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
+pub async fn orderbook_json<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
     client
         .get_json(
             "/api/v1/orderbook",
@@ -24,7 +27,7 @@ pub async fn orderbook<T: Transport>(client: &TossClient<T>, symbol: &str) -> Re
         .await
 }
 
-pub async fn trades<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
+pub async fn trades_json<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
     client
         .get_json(
             "/api/v1/trades",
@@ -34,9 +37,68 @@ pub async fn trades<T: Transport>(client: &TossClient<T>, symbol: &str) -> Resul
         .await
 }
 
-pub async fn price_limits<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
+pub async fn price_limits_json<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+) -> Result<Value> {
     client
         .get_json(
+            "/api/v1/price-limits",
+            vec![("symbol".to_string(), symbol.to_string())],
+            false,
+        )
+        .await
+}
+
+pub async fn candles_json<T: Transport>(
+    client: &TossClient<T>,
+    query: Vec<(String, String)>,
+) -> Result<Value> {
+    client.get_json("/api/v1/candles", query, false).await
+}
+
+pub async fn prices<T: Transport>(
+    client: &TossClient<T>,
+    symbols: &str,
+) -> Result<Vec<PriceResponse>> {
+    client
+        .get_typed(
+            "/api/v1/prices",
+            vec![("symbols".to_string(), symbols.to_string())],
+            false,
+        )
+        .await
+}
+
+pub async fn orderbook<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+) -> Result<OrderbookResponse> {
+    client
+        .get_typed(
+            "/api/v1/orderbook",
+            vec![("symbol".to_string(), symbol.to_string())],
+            false,
+        )
+        .await
+}
+
+pub async fn trades<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Vec<Trade>> {
+    client
+        .get_typed(
+            "/api/v1/trades",
+            vec![("symbol".to_string(), symbol.to_string())],
+            false,
+        )
+        .await
+}
+
+pub async fn price_limits<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+) -> Result<PriceLimitResponse> {
+    client
+        .get_typed(
             "/api/v1/price-limits",
             vec![("symbol".to_string(), symbol.to_string())],
             false,
@@ -47,8 +109,8 @@ pub async fn price_limits<T: Transport>(client: &TossClient<T>, symbol: &str) ->
 pub async fn candles<T: Transport>(
     client: &TossClient<T>,
     query: Vec<(String, String)>,
-) -> Result<Value> {
-    client.get_json("/api/v1/candles", query, false).await
+) -> Result<CandlePageResponse> {
+    client.get_typed("/api/v1/candles", query, false).await
 }
 
 #[cfg(test)]
@@ -57,11 +119,16 @@ mod tests {
 
     use async_trait::async_trait;
     use parking_lot::Mutex;
+    use serde_json::json;
 
-    use super::{candles, orderbook, price_limits, prices, trades};
+    use super::{
+        candles, candles_json, orderbook, orderbook_json, price_limits, price_limits_json, prices,
+        prices_json, trades, trades_json,
+    };
     use crate::auth::TokenManager;
     use crate::client::TossClient;
     use crate::config::AppConfig;
+    use crate::models::common::{Currency, MarketCountry};
     use crate::transport::{HttpRequest, HttpResponse, Transport};
 
     #[derive(Clone)]
@@ -104,49 +171,99 @@ mod tests {
         )
     }
 
+    fn response(body: &[u8]) -> HttpResponse {
+        HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: body.to_vec(),
+        }
+    }
+
+    fn token_response() -> HttpResponse {
+        response(br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#)
+    }
+
     #[tokio::test]
-    async fn routes_market_data_requests() {
+    async fn parses_typed_market_data_results_and_unknown_strings() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(vec![
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
-                    .to_vec(),
-            },
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
-            },
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
-            },
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
-            },
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
-            },
-            HttpResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: br#"{"result":{}}"#.to_vec(),
-            },
+            token_response(),
+            response(br#"{"result":[{"symbol":"AAPL","timestamp":"2026-03-25T22:30:00.456+09:00","lastPrice":"181.23","currency":"USD"}]}"#),
+            response(br#"{"result":{"timestamp":"2026-03-25T09:30:00.123+09:00","currency":"KRW","asks":[{"price":"72300","volume":"1200"}],"bids":[{"price":"72000","volume":"5200"}]}}"#),
+            response(br#"{"result":[{"price":"72000","volume":"120","timestamp":"2026-03-25T09:30:42.000+09:00","currency":"KRW"},{"price":"71900","volume":"50","timestamp":"2026-03-25T09:30:41.500+09:00","currency":"KRW"}]}"#),
+            response(br#"{"result":{"timestamp":"2026-03-25T09:30:00.123+09:00","upperLimitPrice":"93000","lowerLimitPrice":"50400","currency":"KRW"}}"#),
+            response(br#"{"result":{"candles":[{"timestamp":"2026-03-25T09:00:00+09:00","openPrice":"71600","highPrice":"72300","lowPrice":"71500","closePrice":"72000","volume":"3521000","currency":"KRW"},{"timestamp":"2026-03-25T09:01:00+09:00","openPrice":"72000","highPrice":"72100","lowPrice":"71900","closePrice":"71950","volume":"120000","currency":"KRW"}],"nextBefore":"2026-03-25T09:00:00+09:00"}}"#),
         ]));
         let client = client(requests.clone(), responses);
 
-        prices(&client, "AAPL,MSFT").await.unwrap();
-        orderbook(&client, "AAPL").await.unwrap();
-        trades(&client, "AAPL").await.unwrap();
-        price_limits(&client, "AAPL").await.unwrap();
-        candles(
+        let prices = prices(&client, "AAPL").await.unwrap();
+        assert_eq!(prices[0].symbol, "AAPL");
+        assert_eq!(prices[0].last_price, json!("181.23"));
+        assert_eq!(prices[0].currency.0, "USD");
+        assert_eq!(
+            prices[0].timestamp.as_deref(),
+            Some("2026-03-25T22:30:00.456+09:00")
+        );
+
+        let orderbook = orderbook(&client, "AAPL").await.unwrap();
+        assert_eq!(orderbook.currency.0, "KRW");
+        assert_eq!(orderbook.asks[0].price, json!("72300"));
+        assert_eq!(orderbook.bids[0].volume, json!("5200"));
+
+        let trades = trades(&client, "AAPL").await.unwrap();
+        assert_eq!(trades[0].price, json!("72000"));
+        assert_eq!(trades[0].currency.0, "KRW");
+
+        let limits = price_limits(&client, "AAPL").await.unwrap();
+        assert_eq!(limits.upper_limit_price, Some(json!("93000")));
+        assert_eq!(limits.currency.0, "KRW");
+
+        let candles = candles(
+            &client,
+            vec![
+                ("symbol".to_string(), "AAPL".to_string()),
+                ("interval".to_string(), "1d".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+        assert_eq!(candles.candles.len(), 2);
+        assert_eq!(candles.candles[0].close_price, json!("72000"));
+        assert_eq!(
+            candles.next_before.as_deref(),
+            Some("2026-03-25T09:00:00+09:00")
+        );
+
+        assert_eq!(
+            serde_json::from_value::<Currency>(json!("ZZZ")).unwrap().0,
+            "ZZZ"
+        );
+        assert_eq!(
+            serde_json::from_value::<MarketCountry>(json!("XX"))
+                .unwrap()
+                .0,
+            "XX"
+        );
+    }
+
+    #[tokio::test]
+    async fn routes_market_data_json_requests() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            response(br#"{"result":[]}"#),
+            response(br#"{"result":{}}"#),
+            response(br#"{"result":[]}"#),
+            response(br#"{"result":{}}"#),
+            response(br#"{"result":{}}"#),
+        ]));
+        let client = client(requests.clone(), responses);
+
+        prices_json(&client, "AAPL,MSFT").await.unwrap();
+        orderbook_json(&client, "AAPL").await.unwrap();
+        trades_json(&client, "AAPL").await.unwrap();
+        price_limits_json(&client, "AAPL").await.unwrap();
+        candles_json(
             &client,
             vec![
                 ("symbol".to_string(), "AAPL".to_string()),
