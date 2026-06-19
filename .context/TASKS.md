@@ -19,7 +19,7 @@ Source plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
 |--------|------|------------------------|
 | [x] | Workspace and config foundation | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core config::tests` → 5 passed. Commits `51751c9`, `553bee0`. |
 | [x] | Transport and auth token manager | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core auth::tests` → 5 passed. Commits `66c5239`, `a37bb14`, `927bab9`. |
-| [ ] | Authenticated client and endpoint wrappers | Add `TossClient` and read-only endpoint wrappers. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-core`. |
+| [x] | Authenticated client and endpoint wrappers | Complete. Verified with `cargo test --manifest-path rust/Cargo.toml -p toss-core` → 17 passed. Commit `ca0de61`. |
 | [ ] | CLI parser and output runtime | Add `toss-cli`, clap parser, JSON envelopes, config smoke test. Verify with `cargo test --manifest-path rust/Cargo.toml -p toss-cli`. |
 | [ ] | Wire read-only commands | Dispatch Phase 1 commands to `toss-core`. Verify with `cargo test --manifest-path rust/Cargo.toml`. |
 | [ ] | Documentation and final verification | Add README, run `cargo fmt`, `cargo test`, `cargo build`, and config smoke command from the plan. |
