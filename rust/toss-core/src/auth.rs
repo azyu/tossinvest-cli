@@ -45,6 +45,13 @@ struct TokenResponse {
     expires_in: i64,
 }
 
+#[derive(Debug, Deserialize)]
+struct TokenErrorResponse {
+    error: String,
+    #[serde(default)]
+    error_description: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedToken {
     client_id: String,
@@ -119,6 +126,11 @@ impl<T: Transport> TokenManager<T> {
                 request_id: header_value(&response.headers, "x-request-id"),
             });
         }
+        if (response.status == 400 || response.status == 401)
+            && serde_json::from_slice::<TokenErrorResponse>(&response.body).is_ok()
+        {
+            return Err(TossError::Auth(token_error_message(&response.body)));
+        }
         if response.status >= 400 {
             return Err(TossError::Api {
                 status: Some(response.status),
@@ -182,6 +194,13 @@ fn header_value(headers: &[Header], name: &str) -> Option<String> {
         .iter()
         .find(|header| header.name.eq_ignore_ascii_case(name))
         .map(|header| header.value.clone())
+}
+
+fn token_error_message(body: &[u8]) -> String {
+    if let Ok(error) = serde_json::from_slice::<TokenErrorResponse>(body) {
+        return error.error_description.unwrap_or(error.error);
+    }
+    String::from_utf8_lossy(body).to_string()
 }
 
 fn form_urlencoded_body(client_id: &str, client_secret: &str) -> String {
@@ -457,6 +476,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn classifies_token_endpoint_oauth_error_as_auth() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests: requests.clone(),
+            response: HttpResponse {
+                status: 401,
+                headers: vec![Header {
+                    name: "X-Request-Id".to_string(),
+                    value: "req-auth".to_string(),
+                }],
+                body: br#"{"error":"invalid_client","error_description":"bad credentials"}"#
+                    .to_vec(),
+            },
+        };
+        let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
+        let manager = TokenManager::new_with_cache_path(
+            "client-auth".to_string(),
+            "secret-auth".to_string(),
+            cache_path,
+            transport,
+        );
+
+        let err = manager.get_token().await.unwrap_err();
+        match err {
+            TossError::Auth(message) => {
+                assert!(message.contains("bad credentials"), "{message}");
+            }
+            other => panic!("expected auth error, got {other:?}"),
+        }
+
+        let captured = requests.lock();
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].path, "/oauth2/token");
+    }
+
+    #[tokio::test]
     async fn classifies_token_endpoint_429_as_rate_limit() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let transport = RecordingTransport {
@@ -501,6 +556,40 @@ mod tests {
         let captured = requests.lock();
         assert_eq!(captured.len(), 1);
         assert_eq!(captured[0].path, "/oauth2/token");
+    }
+
+    #[tokio::test]
+    async fn classifies_token_endpoint_400_as_auth() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            requests: requests.clone(),
+            response: HttpResponse {
+                status: 400,
+                headers: vec![Header {
+                    name: "X-Request-Id".to_string(),
+                    value: "req-400".to_string(),
+                }],
+                body: br#"{"error":"invalid_grant","error_description":"client secret is invalid"}"#
+                    .to_vec(),
+            },
+        };
+        let cache_path = tempfile::tempdir().unwrap().path().join("token.json");
+        let manager = TokenManager::new_with_cache_path(
+            "client-400".to_string(),
+            "secret-400".to_string(),
+            cache_path,
+            transport,
+        );
+
+        let err = manager.get_token().await.unwrap_err();
+        match err {
+            TossError::Auth(message) => {
+                assert_eq!(message, "client secret is invalid");
+            }
+            other => panic!("expected auth error, got {other:?}"),
+        }
+
+        assert_eq!(requests.lock().len(), 1);
     }
 
 
