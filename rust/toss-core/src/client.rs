@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::auth::TokenManager;
@@ -102,6 +103,18 @@ impl<T: Transport> TossClient<T> {
             })
             .await?;
         parse_response(response.status, &response.headers, &response.body)
+    }
+    pub async fn get_typed<R>(
+        &self,
+        path: &str,
+        query: Vec<(String, String)>,
+        account_required: bool,
+    ) -> Result<R>
+    where
+        R: DeserializeOwned,
+    {
+        let value = self.get_json(path, query, account_required).await?;
+        Ok(serde_json::from_value(value)?)
     }
 }
 
@@ -262,5 +275,55 @@ mod tests {
             err.to_string().contains("toss account use <accountSeq>"),
             "{err}"
         );
+    }
+    #[derive(Debug, serde::Deserialize, PartialEq)]
+    struct TypedProbe {
+        symbol: String,
+        last_price: serde_json::Value,
+    }
+
+    #[tokio::test]
+    async fn parses_typed_result_without_floating_point() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"access_token":"token-1","token_type":"Bearer","expires_in":86400}"#
+                    .to_vec(),
+            },
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: br#"{"result":{"symbol":"AAPL","last_price":"181.23"}}"#.to_vec(),
+            },
+        ]));
+        let transport = QueueTransport {
+            requests: requests.clone(),
+            responses,
+        };
+        let tempdir = tempfile::tempdir().unwrap();
+        let token_manager = TokenManager::new_with_cache_path(
+            "client".to_string(),
+            "secret".to_string(),
+            tempdir.path().join("token.json"),
+            transport.clone(),
+        );
+        let client = TossClient::new_with_parts(
+            AppConfig {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                account_seq: None,
+            },
+            token_manager,
+            transport,
+        );
+
+        let typed: TypedProbe = client
+            .get_typed("/api/v1/probe", Vec::new(), false)
+            .await
+            .unwrap();
+        assert_eq!(typed.symbol, "AAPL");
+        assert_eq!(typed.last_price, serde_json::json!("181.23"));
     }
 }
