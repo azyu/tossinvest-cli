@@ -9,6 +9,11 @@ async fn main() {
     let args: Vec<OsString> = std::env::args_os().collect();
     let mut stdout = std::io::stdout();
 
+    if is_version_request(&args) {
+        print_version();
+        return;
+    }
+
     match Cli::try_parse_from(args.clone()) {
         Ok(cli) => {
             let command = cli.command.name();
@@ -34,6 +39,24 @@ async fn main() {
             error.exit();
         }
     }
+}
+
+fn is_version_request(args: &[OsString]) -> bool {
+    args.len() == 2
+        && args
+            .get(1)
+            .and_then(|arg| arg.to_str())
+            .is_some_and(|arg| arg == "--version" || arg == "-V")
+}
+
+fn print_version() {
+    println!(
+        "toss version {}+{}\ncommit: {}\nbuilt: {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("TOSS_BUILD_COMMIT"),
+        env!("TOSS_BUILD_COMMIT"),
+        env!("TOSS_BUILD_TIME")
+    );
 }
 
 fn emits_json_validation_error(args: &[OsString], kind: ErrorKind) -> bool {

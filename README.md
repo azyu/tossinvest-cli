@@ -2,11 +2,26 @@
 
 Rust CLI for Toss Securities Open API. The binary name is `toss`.
 
-## Install
+## Quick Start
 
 ```bash
 cargo build --manifest-path rust/Cargo.toml -p toss-cli --release --bin toss
+mkdir -p ~/.local/bin
 install -m 755 rust/target/release/toss ~/.local/bin/toss
+
+toss --version
+toss --json config
+toss --json auth token
+toss --json account list
+toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
+```
+
+`toss --version` prints build metadata:
+
+```text
+toss version 0.1.0+<commit>
+commit: <commit>
+built: <UTC timestamp>
 ```
 
 ## Config
