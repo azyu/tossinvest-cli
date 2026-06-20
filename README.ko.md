@@ -80,7 +80,7 @@ toss --json auth token
 
 `config`는 `client_id`를 masking하고 `client_secret`을 출력하지 않습니다. `auth token`은 token 발급 가능 여부를 확인하지만 token 값을 출력하지 않습니다.
 
-### 3. 필요할 때 계좌 선택
+#### 2.1. 필요할 때 계좌 선택 (선택 사항)
 
 ```bash
 toss account list
@@ -89,7 +89,7 @@ toss account use 1
 
 `account_seq`는 계좌가 필요한 명령을 사용하기 전까지는 선택 사항입니다.
 
-### 4. 자주 쓰는 조회 명령 실행
+### 3. 자주 쓰는 조회 명령 실행
 
 ```bash
 toss price AAPL
@@ -108,7 +108,7 @@ toss market calendar us
 toss holdings
 ```
 
-### 5. 주문 안전장치 확인
+### 4. 주문 안전장치 확인
 
 Dry-run 주문 명령은 요청 형태를 출력하고 실주문을 보내지 않습니다.
 

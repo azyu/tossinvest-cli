@@ -80,7 +80,7 @@ toss --json auth token
 
 `config` masks `client_id` and never prints `client_secret`. `auth token` checks token issuance and never prints the token.
 
-### 3. Select an account when needed
+#### 2.1. Select an account when needed (optional)
 
 ```bash
 toss account list
@@ -89,7 +89,7 @@ toss account use 1
 
 `account_seq` is optional until account-bound commands are used.
 
-### 4. Run common read-only commands
+### 3. Run common read-only commands
 
 ```bash
 toss price AAPL
@@ -108,7 +108,7 @@ toss market calendar us
 toss holdings
 ```
 
-### 5. Check order safety
+### 4. Check order safety
 
 Dry-run order commands print the request shape and do not send a live order:
 
