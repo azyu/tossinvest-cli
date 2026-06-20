@@ -1,5 +1,6 @@
 use std::fs;
-use std::process::Command as ProcessCommand;
+use std::io::Write;
+use std::process::{Command as ProcessCommand, Stdio};
 
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
@@ -57,11 +58,52 @@ fn prints_bb_style_version() {
 }
 
 #[test]
+fn help_includes_quick_start() {
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .arg("--help")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Quick Start"), "{stdout}");
+    assert!(stdout.contains("toss setup"), "{stdout}");
+    assert!(stdout.contains("toss --json auth token"), "{stdout}");
+    assert!(stdout.contains("toss --json order buy"), "{stdout}");
+}
+
+#[test]
 fn parses_json_price_command() {
     let cli = Cli::parse_from(["toss", "--json", "price", "005930"]);
     assert_eq!(cli.output_format(), OutputFormat::Json);
     match cli.command {
         Command::Price(args) => assert_eq!(args.symbol, "005930"),
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_setup_command_without_secret_flag() {
+    let cli = Cli::parse_from([
+        "toss",
+        "--json",
+        "setup",
+        "--client-id",
+        "client-abc",
+        "--with-secret-stdin",
+        "--no-check",
+        "--account",
+        "7",
+    ]);
+    assert_eq!(cli.output_format(), OutputFormat::Json);
+    assert_eq!(cli.account.as_deref(), Some("7"));
+    match cli.command {
+        Command::Setup(args) => {
+            assert_eq!(args.client_id.as_deref(), Some("client-abc"));
+            assert!(args.with_secret_stdin);
+            assert!(args.no_check);
+        }
         other => panic!("unexpected command: {other:?}"),
     }
 }
@@ -410,6 +452,63 @@ fn runs_account_use_command_through_binary() {
     assert!(contents.contains("account_seq: 42"));
     assert!(contents.contains("client_id: client-abc"));
     assert!(contents.contains("client_secret: secret-xyz"));
+}
+
+#[test]
+fn runs_setup_command_through_binary_without_printing_secret() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.yaml");
+
+    let mut child = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "setup",
+            "--client-id",
+            "client-abc",
+            "--with-secret-stdin",
+            "--no-check",
+            "--account",
+            "7",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(b"secret-xyz\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("secret-xyz"), "{stdout}");
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(envelope["ok"], true);
+    assert_eq!(envelope["command"], "setup");
+    assert_eq!(envelope["data"]["credentials"], "configured");
+    assert_eq!(envelope["data"]["token_check"], "skipped");
+    assert_eq!(envelope["data"]["account_seq"], 7);
+    assert!(envelope["data"].get("client_secret").is_none());
+
+    let contents = fs::read_to_string(&config).unwrap();
+    assert!(contents.contains("client_id: client-abc"));
+    assert!(contents.contains("client_secret: secret-xyz"));
+    assert!(contents.contains("account_seq: 7"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode = fs::metadata(&config).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode & 0o077, 0, "config must not be group/world readable");
+    }
 }
 
 #[test]

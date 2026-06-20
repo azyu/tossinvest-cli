@@ -13,7 +13,7 @@
 - Read-only commands for prices, quotes, charts, stocks, markets, account listing, and holdings
 - Order commands with dry-run output and explicit `--confirm` safety gates
 - Human-friendly text output plus stable JSON output for automation
-- Config file with environment overrides
+- Guided `toss setup`, config file, and environment override support
 - Cross-platform release binaries for Linux, macOS, and Windows
 - Build metadata via `toss --version` and `toss -V`
 
@@ -51,19 +51,22 @@ install -m 755 rust/target/release/toss ~/.local/bin/toss
 
 ### 1. Configure credentials
 
+The recommended path is the interactive setup command:
+
 ```bash
-mkdir -p ~/.config/tossinvest
-chmod 700 ~/.config/tossinvest
-$EDITOR ~/.config/tossinvest/config.yaml
-chmod 600 ~/.config/tossinvest/config.yaml
+toss setup
 ```
 
-```yaml
-client_id: "issued-client-id"
-client_secret: "issued-client-secret"
+For scripted setup, keep the secret out of command-line arguments and pass it on stdin:
+
+```bash
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --no-check
 ```
 
-You can also use environment variables:
+`toss setup` writes `~/.config/tossinvest/config.yaml` with restrictive permissions on Unix. The file contains plaintext credentials, so keep it outside repositories and backups you do not trust.
+
+You can also use environment variables without writing a config file:
 
 ```bash
 export TOSSINVEST_CLIENT_ID="issued-client-id"
@@ -142,6 +145,7 @@ toss order cancel <ORDER_ID> --confirm
 
 | Group | Subcommands |
 |-------|-------------|
+| `toss setup` | save `client_id` and `client_secret` to the local config file |
 | `toss config` | show resolved config summary |
 | `toss auth` | `token` |
 | `toss price` | current price by symbol |
@@ -155,7 +159,8 @@ toss order cancel <ORDER_ID> --confirm
 | `toss --version` / `toss -V` | build metadata |
 
 > [!NOTE]
-> `toss account use <seq>` updates the local config file. Use `--account <seq>` for a one-off account override.
+> `toss setup` writes plaintext credentials to the local config file; it never prints `client_secret`.
+> `toss account use <seq>` updates only the account sequence in the same local config file. Use `--account <seq>` for a one-off account override.
 > `toss order list` requires `--status open|closed`; `toss order show` requires an order ID; `toss order sellable-quantity` requires `--symbol`.
 
 ## Configuration and Auth
@@ -164,6 +169,23 @@ Config path priority:
 
 1. `--config <path>`
 2. `~/.config/tossinvest/config.yaml`
+
+Credential setup commands:
+
+```bash
+# Interactive: prompts for client_id and client_secret.
+toss setup
+
+# Scripted: reads client_secret from stdin, not from argv.
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --no-check
+
+# One-time account selection while writing credentials.
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --account 1
+```
+
+`toss setup` runs a token check after saving unless `--no-check` is set. Use `--no-check` for offline setup, CI smoke tests, or when credentials are not yet active.
 
 Environment overrides:
 
@@ -180,7 +202,7 @@ Token cache path:
 ```
 
 > [!CAUTION]
-> Keep credentials and token cache files outside the repository. Use restrictive file permissions.
+> `toss setup` stores `client_secret` in the local config file as plaintext. Keep credentials and token cache files outside the repository. Use restrictive file permissions or environment variables when local plaintext storage is not acceptable.
 
 ## Output Contract
 

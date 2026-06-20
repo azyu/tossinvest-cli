@@ -8,8 +8,21 @@ pub enum OutputFormat {
     Json,
 }
 
+const QUICK_START: &str = r#"Quick Start:
+  toss setup
+  toss --json auth token
+  toss account list
+  toss account use 1
+  toss price AAPL
+  toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
+
+Safety:
+  toss setup stores client_secret in the local config file as plaintext.
+  Live order create/modify/cancel commands require --confirm.
+"#;
+
 #[derive(Debug, Parser)]
-#[command(name = "toss", about = "Toss Securities Open API CLI")]
+#[command(name = "toss", about = "Toss Securities Open API CLI", after_help = QUICK_START)]
 pub struct Cli {
     #[arg(
         long,
@@ -46,6 +59,7 @@ impl Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Config,
+    Setup(SetupArgs),
     Auth(AuthArgs),
     Price(PriceArgs),
     Quote(QuoteArgs),
@@ -61,6 +75,7 @@ impl Command {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Config => "config",
+            Self::Setup(_) => "setup",
             Self::Auth(_) => "auth",
             Self::Price(_) => "price",
             Self::Quote(_) => "quote",
@@ -207,6 +222,19 @@ impl std::fmt::Display for OrderSide {
             Self::Sell => "SELL",
         })
     }
+}
+
+#[derive(Debug, Args)]
+pub struct SetupArgs {
+    #[arg(long = "client-id", help = "client_id to save")]
+    pub client_id: Option<String>,
+    #[arg(
+        long = "with-secret-stdin",
+        help = "read client_secret from standard input instead of prompting"
+    )]
+    pub with_secret_stdin: bool,
+    #[arg(long = "no-check", help = "skip token issuance check after saving")]
+    pub no_check: bool,
 }
 
 #[derive(Debug, Args)]

@@ -45,29 +45,26 @@ Run `hash -r` in POSIX shells after replacing an existing binary.
 
 ## Credential Setup
 
-Use the default config path:
+Use the interactive setup command for normal local setup:
+
+```bash
+toss setup
+```
+
+For scripted setup, pass the secret on stdin instead of a command-line flag:
+
+```bash
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --no-check
+```
+
+Default config path:
 
 ```text
 ~/.config/tossinvest/config.yaml
 ```
 
-Create it with restrictive permissions:
-
-```bash
-mkdir -p ~/.config/tossinvest
-chmod 700 ~/.config/tossinvest
-$EDITOR ~/.config/tossinvest/config.yaml
-chmod 600 ~/.config/tossinvest/config.yaml
-```
-
-Expected config shape:
-
-```yaml
-client_id: "issued-client-id"
-client_secret: "issued-client-secret"
-```
-
-Use environment variables for session-only configuration:
+`toss setup` writes plaintext credentials to the local config file with restrictive permissions on Unix. If plaintext local storage is not acceptable, use environment variables for session-only configuration:
 
 ```bash
 export TOSSINVEST_CLIENT_ID="issued-client-id"

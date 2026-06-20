@@ -26,9 +26,19 @@ impl fmt::Debug for AppConfig {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct FileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     client_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     client_secret: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     account_seq: Option<u64>,
+}
+
+#[derive(Debug, Default)]
+pub struct ConfigUpdate {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub account_seq: Option<Option<u64>>,
 }
 
 pub fn load(config_path: Option<&Path>, account_override: Option<&str>) -> Result<AppConfig> {
@@ -58,15 +68,27 @@ pub fn load(config_path: Option<&Path>, account_override: Option<&str>) -> Resul
     })
 }
 
+pub fn save_config(config_path: Option<&Path>, update: ConfigUpdate) -> Result<PathBuf> {
+    let path = default_config_path(config_path)?;
+    let mut file = read_file_config(&path, true)?;
+    if let Some(client_id) = update.client_id {
+        file.client_id = Some(client_id);
+    }
+    if let Some(client_secret) = update.client_secret {
+        file.client_secret = Some(client_secret);
+    }
+    if let Some(account_seq) = update.account_seq {
+        file.account_seq = account_seq;
+    }
+    write_file_config(&path, &file)?;
+    Ok(path)
+}
+
 pub fn save_account_seq(config_path: Option<&Path>, account_seq: u64) -> Result<PathBuf> {
     let path = default_config_path(config_path)?;
     let mut file = read_file_config(&path, true)?;
     file.account_seq = Some(account_seq);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let payload = serde_yaml::to_string(&file)?;
-    fs::write(&path, payload)?;
+    write_file_config(&path, &file)?;
     Ok(path)
 }
 
@@ -85,6 +107,84 @@ fn read_file_config(path: &Path, allow_missing: bool) -> Result<FileConfig> {
     }
 }
 
+fn write_file_config(path: &Path, file: &FileConfig) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+        restrict_config_dir(parent)?;
+    }
+    let payload = serde_yaml::to_string(file)?;
+    write_config_file(path, payload.as_bytes())?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn restrict_config_dir(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(path, permissions)
+}
+
+#[cfg(not(unix))]
+fn restrict_config_dir(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn write_config_file(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| std::borrow::Cow::Borrowed("config.yaml"));
+    let pid = std::process::id();
+
+    for attempt in 0..16u32 {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temp_path = dir.join(format!(".{file_name}.{pid}.{nanos}.{attempt}.tmp"));
+        let mut temp = match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&temp_path)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        };
+
+        let result = (|| {
+            temp.write_all(payload)?;
+            temp.sync_all()?;
+            drop(temp);
+            fs::rename(&temp_path, path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temp_path);
+        }
+        return result;
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "unable to allocate config temp file",
+    ))
+}
+
+#[cfg(not(unix))]
+fn write_config_file(path: &Path, payload: &[u8]) -> std::io::Result<()> {
+    fs::write(path, payload)
+}
+
 fn default_config_path(config_path: Option<&Path>) -> Result<PathBuf> {
     if let Some(path) = config_path {
         return Ok(path.to_path_buf());
@@ -98,7 +198,7 @@ fn default_config_path(config_path: Option<&Path>) -> Result<PathBuf> {
 mod tests {
     use std::fs;
 
-    use super::{AppConfig, load, read_file_config, save_account_seq};
+    use super::{AppConfig, ConfigUpdate, load, read_file_config, save_account_seq, save_config};
     use crate::error::TossError;
 
     #[test]
@@ -191,5 +291,63 @@ client_secret: "secret-file"
         assert!(contents.contains("client_id: client-file"));
         assert!(contents.contains("client_secret: secret-file"));
         assert!(contents.contains("account_seq: 42"));
+    }
+    #[test]
+    fn saves_credentials_with_restrictive_permissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+
+        let saved = save_config(
+            Some(&path),
+            ConfigUpdate {
+                client_id: Some("client-new".to_string()),
+                client_secret: Some("secret-new".to_string()),
+                account_seq: Some(Some(7)),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(saved, path);
+        let contents = fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("client_id: client-new"));
+        assert!(contents.contains("client_secret: secret-new"));
+        assert!(contents.contains("account_seq: 7"));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode & 0o077, 0, "config must not be group/world readable");
+        }
+    }
+
+    #[test]
+    fn save_config_preserves_unspecified_values_and_clears_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        fs::write(
+            &path,
+            r#"client_id: "client-file"
+client_secret: "secret-file"
+account_seq: 42
+"#,
+        )
+        .unwrap();
+
+        save_config(
+            Some(&path),
+            ConfigUpdate {
+                client_id: Some("client-updated".to_string()),
+                client_secret: None,
+                account_seq: Some(None),
+            },
+        )
+        .unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("client_id: client-updated"));
+        assert!(contents.contains("client_secret: secret-file"));
+        assert!(!contents.contains("account_seq"));
     }
 }

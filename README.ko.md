@@ -13,7 +13,7 @@
 - 현재가, 호가, 차트, 종목, 시장, 계좌 목록, 보유잔고 조회 명령 제공
 - 주문 명령은 dry-run 출력과 명시적 `--confirm` 안전장치 제공
 - 사람용 text 출력과 자동화용 안정적인 JSON 출력 지원
-- config file과 environment override 지원
+- `toss setup`, config file, environment override 지원
 - Linux, macOS, Windows용 릴리즈 바이너리 제공
 - `toss --version`, `toss -V`로 build metadata 출력
 
@@ -51,19 +51,22 @@ install -m 755 rust/target/release/toss ~/.local/bin/toss
 
 ### 1. 인증 정보 설정
 
+권장 경로는 interactive setup 명령입니다.
+
 ```bash
-mkdir -p ~/.config/tossinvest
-chmod 700 ~/.config/tossinvest
-$EDITOR ~/.config/tossinvest/config.yaml
-chmod 600 ~/.config/tossinvest/config.yaml
+toss setup
 ```
 
-```yaml
-client_id: "issued-client-id"
-client_secret: "issued-client-secret"
+script에서 설정할 때는 secret을 command-line argument로 넘기지 말고 stdin으로 전달하세요.
+
+```bash
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --no-check
 ```
 
-환경변수로도 설정할 수 있습니다.
+`toss setup`은 Unix에서 제한적인 permission으로 `~/.config/tossinvest/config.yaml`을 씁니다. 이 파일에는 plaintext 인증 정보가 들어가므로 repository와 신뢰하지 않는 backup 밖에 두세요.
+
+config file을 쓰지 않고 환경변수만 사용할 수도 있습니다.
 
 ```bash
 export TOSSINVEST_CLIENT_ID="issued-client-id"
@@ -142,6 +145,7 @@ toss order cancel <ORDER_ID> --confirm
 
 | 그룹 | 서브커맨드 |
 |------|-----------|
+| `toss setup` | `client_id`와 `client_secret`을 로컬 config file에 저장 |
 | `toss config` | 적용된 config 요약 출력 |
 | `toss auth` | `token` |
 | `toss price` | symbol별 현재가 |
@@ -155,7 +159,8 @@ toss order cancel <ORDER_ID> --confirm
 | `toss --version` / `toss -V` | build metadata 출력 |
 
 > [!NOTE]
-> `toss account use <seq>`는 로컬 config file을 업데이트합니다. 일회성 계좌 override에는 `--account <seq>`를 사용하세요.
+> `toss setup`은 로컬 config file에 plaintext 인증 정보를 쓰지만 `client_secret`을 출력하지 않습니다.
+> `toss account use <seq>`는 같은 로컬 config file의 account sequence만 업데이트합니다. 일회성 계좌 override에는 `--account <seq>`를 사용하세요.
 > `toss order list`에는 `--status open|closed`가 필요하고, `toss order show`에는 order ID가 필요하며, `toss order sellable-quantity`에는 `--symbol`이 필요합니다.
 
 ## 설정과 인증
@@ -164,6 +169,23 @@ Config path 우선순위:
 
 1. `--config <path>`
 2. `~/.config/tossinvest/config.yaml`
+
+인증 정보 설정 명령:
+
+```bash
+# Interactive: client_id와 client_secret을 prompt로 입력합니다.
+toss setup
+
+# Scripted: client_secret은 argv가 아니라 stdin으로 읽습니다.
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --no-check
+
+# 인증 정보 저장과 동시에 계좌를 선택합니다.
+printf '%s\n' "$TOSSINVEST_CLIENT_SECRET" | \
+  toss setup --client-id "$TOSSINVEST_CLIENT_ID" --with-secret-stdin --account 1
+```
+
+`toss setup`은 저장 후 token check를 실행합니다. offline setup, CI smoke test, 아직 활성화되지 않은 인증 정보에는 `--no-check`를 사용하세요.
 
 환경변수 override:
 
@@ -180,7 +202,7 @@ Token cache path:
 ```
 
 > [!CAUTION]
-> 인증 정보와 token cache file은 repository 밖에 두고 제한적인 file permission을 사용하세요.
+> `toss setup`은 로컬 config file에 `client_secret`을 plaintext로 저장합니다. 인증 정보와 token cache file은 repository 밖에 두세요. 로컬 plaintext 저장이 부담스럽다면 환경변수 방식을 사용하세요.
 
 ## 출력 계약
 

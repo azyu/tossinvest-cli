@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{self, Write};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -54,8 +54,19 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
     } = cli;
     let command_name = command.name();
     let output_format = if json { OutputFormat::Json } else { output };
-    let app_config = config::load(config.as_deref(), account.as_deref())?;
+    if let cli::Command::Setup(args) = command {
+        return run_setup(
+            output_format,
+            command_name,
+            config.as_deref(),
+            account.as_deref(),
+            args,
+            writer,
+        )
+        .await;
+    }
 
+    let app_config = config::load(config.as_deref(), account.as_deref())?;
     match command {
         cli::Command::Config => run_config(output_format, command_name, &app_config, writer),
         cli::Command::Account(cli::AccountArgs {
@@ -74,6 +85,84 @@ pub async fn run(cli: cli::Cli, writer: &mut dyn Write) -> Result<()> {
             run_client_command(output_format, command_name, command, &client, writer).await
         }
     }
+}
+
+async fn run_setup(
+    output_format: OutputFormat,
+    command: &str,
+    config_path: Option<&std::path::Path>,
+    account_override: Option<&str>,
+    args: cli::SetupArgs,
+    writer: &mut dyn Write,
+) -> Result<()> {
+    let client_id = match args.client_id {
+        Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+        _ => prompt_line("client_id: ")?,
+    };
+    if client_id.is_empty() {
+        return Err(TossError::Validation("client_id is required".to_string()).into());
+    }
+
+    let client_secret = if args.with_secret_stdin {
+        read_secret_from_stdin()?
+    } else {
+        rpassword::prompt_password("client_secret: ")?
+            .trim()
+            .to_string()
+    };
+    if client_secret.is_empty() {
+        return Err(TossError::Validation("client_secret is required".to_string()).into());
+    }
+
+    let account_seq = account_override
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .map_err(|_| TossError::Validation(format!("invalid account sequence: {value}")))
+        })
+        .transpose()?;
+    let saved_path = config::save_config(
+        config_path,
+        config::ConfigUpdate {
+            client_id: Some(client_id),
+            client_secret: Some(client_secret),
+            account_seq: account_seq.map(Some),
+        },
+    )?;
+
+    let token_check = if args.no_check {
+        "skipped"
+    } else {
+        let app_config = config::load(config_path, None)?;
+        let client = TossClient::new(app_config)?;
+        client.check_token().await?;
+        "ok"
+    };
+
+    write_output(
+        output_format,
+        command,
+        json!({
+            "config_path": saved_path,
+            "credentials": "configured",
+            "token_check": token_check,
+            "account_seq": account_seq,
+        }),
+        writer,
+    )
+}
+
+fn prompt_line(prompt: &str) -> Result<String> {
+    eprint!("{prompt}");
+    let mut value = String::new();
+    io::stdin().read_line(&mut value)?;
+    Ok(value.trim().to_string())
+}
+
+fn read_secret_from_stdin() -> Result<String> {
+    let mut value = String::new();
+    io::stdin().read_line(&mut value)?;
+    Ok(value.trim().to_string())
 }
 
 async fn run_client_command<T: Transport>(
@@ -255,6 +344,7 @@ async fn run_client_command<T: Transport>(
         },
         cli::Command::Holdings => serde_json::to_value(asset::holdings(client).await?)?,
         cli::Command::Config => unreachable!("config is handled before client dispatch"),
+        cli::Command::Setup(_) => unreachable!("setup is handled before client dispatch"),
     };
     write_output(output_format, command_name, value, writer)
 }
