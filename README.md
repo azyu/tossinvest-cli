@@ -1,21 +1,20 @@
 # toss
 
+[![CI](https://github.com/azyu/tossinvest-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/azyu/tossinvest-cli/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/azyu/tossinvest-cli)](https://github.com/azyu/tossinvest-cli/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[한국어 README](README.ko.md)
+[English](README.md) | [한국어](README.ko.md)
 
 > A small, agent-friendly Toss Securities Open API CLI built in Rust.
 
-`toss` wraps the [Toss Securities Open API](https://developers.tossinvest.com/docs) with stable JSON envelopes, human-readable text output, and explicit safety gates for order commands.
-
 ## Features
 
-- Read-only investment terminal for prices, quotes, charts, stocks, markets, accounts, and holdings
-- Typed Rust core crate (`toss-core`) plus CLI crate (`toss-cli`)
+- Read-only commands for prices, quotes, charts, stocks, markets, accounts, and holdings
+- Order commands with dry-run output and explicit `--confirm` safety gates
 - Human-friendly text output plus stable JSON output for automation
 - Config file with environment overrides
-- Dry-run order smoke checks
-- Live order commands guarded by explicit `--confirm`
+- Cross-platform release binaries for Linux, macOS, and Windows
 - Build metadata via `toss --version` and `toss -V`
 
 ## Installation
@@ -25,6 +24,18 @@
 ```bash
 brew install azyu/tap/toss
 ```
+
+### Prebuilt binaries
+
+Download the latest archive from [GitHub Releases](https://github.com/azyu/tossinvest-cli/releases/latest).
+
+| Platform | Asset |
+|----------|-------|
+| Linux amd64 | `toss_0.x.y_linux_amd64.tar.gz` |
+| Linux arm64 | `toss_0.x.y_linux_arm64.tar.gz` |
+| macOS arm64 | `toss_0.x.y_macos_arm64.tar.gz` |
+| Windows x64 | `toss_0.x.y_windows_x64.zip` |
+| Windows arm64 | `toss_0.x.y_windows_arm64.zip` |
 
 ### From source
 
@@ -36,25 +47,9 @@ mkdir -p ~/.local/bin
 install -m 755 rust/target/release/toss ~/.local/bin/toss
 ```
 
-Verify the installed binary:
-
-```bash
-toss --version
-```
-
-Example output:
-
-```text
-toss version 0.0.1+<commit>
-commit: <commit>
-built: <UTC timestamp>
-```
-
 ## Quick Start
 
 ### 1. Configure credentials
-
-Create the default config file:
 
 ```bash
 mkdir -p ~/.config/tossinvest
@@ -63,21 +58,12 @@ $EDITOR ~/.config/tossinvest/config.yaml
 chmod 600 ~/.config/tossinvest/config.yaml
 ```
 
-Config shape:
-
 ```yaml
 client_id: "issued-client-id"
 client_secret: "issued-client-secret"
 ```
 
-Select and persist an account only when account-bound commands are needed:
-
-```bash
-toss account list
-toss account use 1
-```
-
-You can also use session-only environment variables:
+You can also use environment variables:
 
 ```bash
 export TOSSINVEST_CLIENT_ID="issued-client-id"
@@ -94,7 +80,16 @@ toss --json auth token
 
 `config` masks `client_id` and never prints `client_secret`. `auth token` checks token issuance and never prints the token.
 
-### 3. Run read-only commands
+### 3. Select an account when needed
+
+```bash
+toss account list
+toss account use 1
+```
+
+`account_seq` is optional until account-bound commands are used.
+
+### 4. Run common read-only commands
 
 ```bash
 toss price AAPL
@@ -110,12 +105,10 @@ toss market exchange-rate
 toss market calendar kr
 toss market calendar us
 
-toss account list
-toss account use 1
 toss holdings
 ```
 
-### 4. Run order safety checks
+### 5. Check order safety
 
 Dry-run order commands print the request shape and do not send a live order:
 
@@ -150,16 +143,7 @@ toss order cancel ORD-123 --confirm
 | `toss account` | `list`, `use` |
 | `toss holdings` | account holdings |
 | `toss order` | `buy`, `sell`, `modify`, `cancel`, `list`, `show`, `buying-power`, `sellable-quantity`, `commissions` |
-
-## Global Options
-
-```text
---config <path>       config file (default: ~/.config/tossinvest/config.yaml)
---account <seq>       accountSeq override for account-bound commands
---output text|json    output format
---json                shortcut for --output json
---quiet               suppress extra text in text output
-```
+| `toss --version` / `toss -V` | build metadata |
 
 ## Configuration and Auth
 
@@ -189,13 +173,9 @@ Token cache path:
 
 Use `--json` or `--output json` for automation.
 
-Successful JSON output:
-
 ```json
 {"ok":true,"command":"price","data":{}}
 ```
-
-Error JSON output:
 
 ```json
 {"ok":false,"command":"price","error":{"kind":"api","code":"stock-not-found","message":"...","requestId":"..."}}
@@ -214,7 +194,7 @@ Text output is for humans. In text mode, command errors are written to stderr. I
 
 ## Developer Docs
 
-- Design spec: [`docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md`](docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md)
-- Phase 1 plan: [`docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`](docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md)
-- Phase 2 plan: [`docs/superpowers/plans/2026-06-19-tossinvest-cli-phase2.md`](docs/superpowers/plans/2026-06-19-tossinvest-cli-phase2.md)
-- Phase 3 plan: [`docs/superpowers/plans/2026-06-19-tossinvest-cli-phase3.md`](docs/superpowers/plans/2026-06-19-tossinvest-cli-phase3.md)
+- [Technical spec](docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md)
+- [Phase 1 plan](docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md)
+- [Phase 2 plan](docs/superpowers/plans/2026-06-19-tossinvest-cli-phase2.md)
+- [Phase 3 plan](docs/superpowers/plans/2026-06-19-tossinvest-cli-phase3.md)
