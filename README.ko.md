@@ -127,7 +127,7 @@ toss order cancel ORD-123 --confirm
 ```
 
 > [!CAUTION]
-> 확인한 토스 Open API 문서에는 sandbox가 명시되어 있지 않습니다. `--confirm`이 붙은 주문 명령은 production brokerage traffic으로 취급하세요.
+> 확인한 토스 Open API 문서에는 sandbox가 명시되어 있지 않습니다. `--confirm`이 붙은 주문 명령은 실제 증권 계좌에 주문을 전송하는 실거래 요청으로 취급하세요.
 
 ## 명령 개요
 

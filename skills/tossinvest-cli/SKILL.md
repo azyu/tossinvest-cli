@@ -1,61 +1,57 @@
 ---
 name: tossinvest-cli
-description: This skill should be used when the user asks to "work on tossinvest-cli", "use the Toss Securities CLI", "verify Toss API credentials", "test Toss Open API", "add Toss order commands", "run toss order dry-run", or mentions the `toss` binary, Toss Securities Open API credentials, order safety, accountSeq, dry-run orders, or the `/Volumes/EXTSSD/code/personal/tossinvest-cli` repository.
+description: This skill should be used when the user asks to "use toss", "run toss", "install toss", "configure Toss Securities credentials", "check Toss API auth", "list Toss accounts", "check Toss holdings", "query Toss prices", "run a toss order dry-run", or asks how to use the `toss` CLI for Toss Securities Open API tasks. It is for CLI usage, credential setup, safe read-only checks, JSON output handling, and order safety workflows; it is not for developing the Rust codebase.
 version: 0.1.0
 ---
 
-# Tossinvest CLI Skill
+# Toss CLI Usage Skill
 
-Use this skill to work safely with the `tossinvest-cli` Rust workspace and the installed `toss` binary. Treat Toss Securities Open API as a production-capable brokerage API. Prefer read-only checks and dry-run order checks unless the user explicitly requests a live order and all safety preconditions are satisfied.
+Use this skill to operate the installed `toss` command safely. Treat the Toss Securities Open API as production-capable brokerage infrastructure. Prefer read-only commands and dry-run order checks unless the user explicitly requests a live order and provides all required details in the current conversation.
 
-## Core Context
+This skill is for CLI usage, not repository development. Do not use it to decide Rust implementation patterns, tests, release automation, or crate architecture.
 
-Start every repository task by reading these files in order:
+## Core Safety Rules
 
-1. `.context/PROJECT.md` — current project state and approved phase links.
-2. `.context/STEERING.md` — durable constraints and decision log.
-3. `.context/TASKS.md` — current status board.
-4. `AGENTS.md` — repository-wide instructions.
+- Keep Toss credentials outside repositories and chat transcripts.
+- Never print or repeat `client_secret`, OAuth access tokens, refresh tokens, or token cache contents.
+- Treat account numbers, holdings, order history, buying power, and sellable quantity as private financial data.
+- Summarize private payloads by status and shape unless the user explicitly asks for exact values.
+- Run live mutating order commands only when the user explicitly asks for a live order in the current conversation.
+- Prefer showing a dry-run command and asking the user to run the final live command locally.
 
-Durable implementation documents:
+For detailed order and credential safety checks, read `references/safety-checklist.md`.
 
-- Design spec: `docs/superpowers/specs/2026-06-18-tossinvest-cli-design.md`
-- Phase 1 plan: `docs/superpowers/plans/2026-06-18-tossinvest-cli-phase1.md`
-- Phase 2 plan: `docs/superpowers/plans/2026-06-19-tossinvest-cli-phase2.md`
-- Phase 3 plan: `docs/superpowers/plans/2026-06-19-tossinvest-cli-phase3.md`
+## Installation Checks
 
-## Repository Shape
-
-Use the Rust workspace under `rust/`:
-
-```text
-rust/
-├── toss-core/   # config, auth, transport, typed API wrappers, order wrappers
-└── toss-cli/    # clap parser, runtime dispatch, text/json envelopes, binary
-```
-
-Key commands:
+Check whether `toss` is available:
 
 ```bash
-cargo fmt --all --manifest-path rust/Cargo.toml
-cargo test --manifest-path rust/Cargo.toml
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss --release
+toss --version
 ```
 
-Use `cargo fmt --all --manifest-path rust/Cargo.toml`; the workspace manifest has no direct targets, so plain `cargo fmt --manifest-path rust/Cargo.toml` is not the reliable command here.
+If missing and Homebrew is available, install from the tap:
 
-## Credential Rules
+```bash
+brew install azyu/tap/toss
+```
 
-Keep credentials outside the repository. Never commit real `client_id`, `client_secret`, access tokens, account numbers from private contexts, token cache files, or local config files.
+If a local release binary was installed manually, prefer the explicit path when shell lookup may be stale:
 
-Supported local config path:
+```bash
+~/.local/bin/toss --version
+```
+
+Run `hash -r` in POSIX shells after replacing an existing binary.
+
+## Credential Setup
+
+Use the default config path:
 
 ```text
 ~/.config/tossinvest/config.yaml
 ```
 
-Safe file setup:
+Create it with restrictive permissions:
 
 ```bash
 mkdir -p ~/.config/tossinvest
@@ -71,14 +67,7 @@ client_id: "issued-client-id"
 client_secret: "issued-client-secret"
 ```
 
-Persist an account only when account-bound commands are needed:
-
-```bash
-toss account list
-toss account use 1
-```
-
-Session-only environment alternative:
+Use environment variables for session-only configuration:
 
 ```bash
 export TOSSINVEST_CLIENT_ID="issued-client-id"
@@ -86,19 +75,16 @@ export TOSSINVEST_CLIENT_SECRET="issued-client-secret"
 export TOSSINVEST_ACCOUNT_SEQ="1"
 ```
 
-Token cache path:
+Persist an account sequence only when account-bound commands are needed:
 
-```text
-~/.tossinvest/token.json
+```bash
+toss account list
+toss account use 1
 ```
 
-Do not read, print, paste, or summarize token cache contents unless diagnosing file permissions. Never include token values in reports.
+## Safe Verification Flow
 
-Treat account, holdings, orders, buying-power, and order-history output as private financial data. Summarize status and payload shape unless the user explicitly asks for exact values.
-
-## Safe Verification Workflow
-
-Use this sequence when asked to verify credentials or installation. Stop at the first failure and report the exact command and observed output shape without exposing secrets or private financial details.
+Use this sequence for credential and installation checks. Stop at the first failure and report the command plus safe output shape, not private payload values.
 
 ```bash
 toss --json config
@@ -109,84 +95,93 @@ toss --json order buying-power --currency USD
 toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
 ```
 
-Expected safety behavior:
+Expected properties:
 
-- `config` masks `client_id` and never prints `client_secret`.
-- `auth token` returns `token_check: ok` and never prints the token.
-- `account list`, `holdings`, and `order buying-power` are read-only.
-- `order buy ... --dry-run` prints method/path/body/account-header presence and never sends a live order.
+- `config` masks `client_id` and omits `client_secret`.
+- `auth token` returns a token-check status without printing the token.
+- Account-bound commands require a configured or overridden `account_seq`.
+- Dry-run order output includes method, path, account header presence, and body shape, but does not send a live order.
 
-Run this negative live-order gate test only when specifically checking order safety:
+## Common Read-only Commands
+
+Use text output for human inspection:
 
 ```bash
-toss --json order buy --symbol AAPL --qty 1 --type limit --price 1
+toss price AAPL
+toss quote orderbook AAPL
+toss quote trades AAPL
+toss chart candles AAPL --interval 1d
+
+toss stock get AAPL
+toss stock warnings 005930
+toss stock search --symbols 005930,AAPL
+
+toss market exchange-rate
+toss market calendar kr
+toss market calendar us
+
+toss holdings
 ```
 
-Expected negative-gate behavior:
+Use JSON output for automation:
 
-- The command must omit `--confirm`.
-- The command must exit non-zero.
-- The JSON error kind must be `validation`.
-- No live order should be sent.
+```bash
+toss --json price AAPL
+toss --json holdings
+toss --output json order list --status open
+```
 
-Do not run live mutating commands during verification.
+## JSON Output Handling
 
-## Order Safety
-
-Treat these commands as mutating when not in dry-run mode:
-
-- `toss order buy ...`
-- `toss order sell ...`
-- `toss order modify ...`
-- `toss order cancel ...`
-
-Safety invariants:
-
-- Live mutating commands require `--confirm`.
-- `--dry-run` takes precedence over `--confirm`.
-- Create order supports `--client-order-id`; do not auto-generate it.
-- High-value acknowledgement is separate: `--confirm-high-value-order` maps to Toss `confirmHighValueOrder` and does not replace `--confirm`.
-- Create order must provide exactly one size field: `--qty` or `--amount`.
-- There is no confirmed sandbox in the docs inspected so far. Assume live commands target production.
-
-Before any live order, require the user to explicitly provide all live-order details in the current conversation: side, symbol, quantity or amount, order type, price when required, account, idempotency choice, and `--confirm` intent. Prefer asking the user to run live commands themselves after reviewing dry-run output.
-
-## Development Rules
-
-Use TDD for behavior changes. Add failing tests first, observe failure, implement the smallest fix, then rerun focused tests.
-
-Keep wrappers thin:
-
-1. Build query/body.
-2. Call `TossClient`.
-3. Parse typed `result`.
-
-Keep financial values as strings or `serde_json::Value`; do not introduce `f32` or `f64` for money, prices, quantities, rates, commissions, or buying power.
-
-Use mock transport tests for request construction and response parsing. Do not require real Toss credentials in automated tests.
-
-Maintain stable CLI envelopes:
+Successful JSON output uses this envelope:
 
 ```json
 {"ok":true,"command":"price","data":{}}
+```
+
+Error JSON output uses this envelope:
+
+```json
 {"ok":false,"command":"price","error":{"kind":"api","message":"..."}}
 ```
 
-JSON errors go to stdout. Text-mode errors go to stderr.
+In JSON mode, both success and error envelopes go to stdout. In text mode, human output goes to stdout and errors go to stderr.
 
-## Installation
+## Order Safety Workflow
 
-Install release binary:
+Use `--dry-run` first for every order path:
 
 ```bash
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss --release
-mkdir -p ~/.local/bin
-install -m 755 rust/target/release/toss ~/.local/bin/toss
-~/.local/bin/toss --json config
+toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
+toss --json order sell --symbol AAPL --qty 1 --type market --dry-run
+toss --json order modify <orderId> --type limit --price 180 --dry-run
+toss --json order cancel <orderId> --dry-run
 ```
 
-If shell lookup still finds an older binary, run `hash -r` or call `~/.local/bin/toss` directly.
+Before any live order, require all of these details in the current conversation:
+
+- side: buy, sell, modify, or cancel
+- symbol for create orders
+- order ID for modify/cancel
+- exactly one size input for create orders: `--qty` or `--amount`
+- order type: limit or market
+- price when required by the order type
+- account/accountSeq to use
+- idempotency decision via `--client-order-id` when creating an order
+- high-value acknowledgement decision if applicable
+- explicit `--confirm` intent
+
+Live mutating commands require `--confirm`. Treat the following as templates only; do not run them as examples:
+
+```bash
+toss order buy --symbol <SYMBOL> --qty <QTY> --type limit --price <PRICE> --client-order-id <CLIENT_ORDER_ID> --confirm
+toss order sell --symbol <SYMBOL> --qty <QTY> --type market --confirm
+toss order modify <ORDER_ID> --qty <QTY> --type limit --price <PRICE> --confirm --confirm-high-value-order
+toss order cancel <ORDER_ID> --confirm
+```
+
+Never treat `--confirm-high-value-order` as a substitute for `--confirm`.
 
 ## Additional Resources
 
-Read `references/safety-checklist.md` before live-order work or credential verification involving real credentials.
+- `references/safety-checklist.md` — credential handling, read-only verification, dry-run expectations, and live-order gates.

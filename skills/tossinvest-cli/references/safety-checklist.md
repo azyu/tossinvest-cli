@@ -1,15 +1,31 @@
-# Tossinvest CLI Safety Checklist
+# Toss CLI Safety Checklist
 
-Use this checklist before credential checks, order feature work, or any live-order discussion.
+Use this checklist when operating the installed `toss` CLI, verifying credentials, reading account data, or discussing order commands. Keep the checklist focused on CLI usage and user safety, not Rust development.
 
 ## Credential Handling
 
-- Keep real credentials outside the repository.
+- Keep real credentials outside repositories and chat transcripts.
 - Prefer `~/.config/tossinvest/config.yaml` with mode `0600`.
 - Keep parent directory `~/.config/tossinvest` mode `0700`.
 - Never commit local config, token cache, account snapshots, or command output containing private account details.
-- Never print `client_secret` or access tokens.
+- Never print `client_secret`, access tokens, refresh tokens, or token cache contents.
 - Treat `~/.tossinvest/token.json` as secret material.
+
+Safe config setup:
+
+```bash
+mkdir -p ~/.config/tossinvest
+chmod 700 ~/.config/tossinvest
+$EDITOR ~/.config/tossinvest/config.yaml
+chmod 600 ~/.config/tossinvest/config.yaml
+```
+
+Expected config shape:
+
+```yaml
+client_id: "issued-client-id"
+client_secret: "issued-client-secret"
+```
 
 ## Read-only Verification
 
@@ -29,10 +45,32 @@ toss --json order show <orderId>
 
 Expected properties:
 
-- `config` masks `client_id`.
-- `auth token` proves OAuth without printing the token.
-- Account-bound commands require valid `account_seq`.
+- `config` masks `client_id` and omits `client_secret`.
+- `auth token` proves OAuth setup without printing the token.
+- Account-bound commands require valid `account_seq` from config, environment, `--account`, or `toss account use`.
 - JSON output may contain private portfolio/account data; summarize carefully and avoid copying full private payloads into chat unless the user asks.
+
+## Account Selection
+
+List accounts before choosing an account sequence:
+
+```bash
+toss account list
+toss account use 1
+```
+
+Use `--account <seq>` for one-off overrides:
+
+```bash
+toss --account 1 holdings
+toss --account 1 --json order buying-power --currency USD
+```
+
+Use `TOSSINVEST_ACCOUNT_SEQ` for a session-scoped default:
+
+```bash
+export TOSSINVEST_ACCOUNT_SEQ="1"
+```
 
 ## Dry-run Verification
 
@@ -45,7 +83,7 @@ toss --json order modify <orderId> --type limit --price 180 --dry-run
 toss --json order cancel <orderId> --dry-run
 ```
 
-Expected dry-run output:
+Expected dry-run output shape:
 
 ```json
 {
@@ -74,47 +112,38 @@ Reject dry-run output if it includes:
 Do not run live order commands unless the user explicitly asks for a live order in the current conversation and provides:
 
 - account/accountSeq to use
-- side: buy or sell
-- symbol
-- exactly one size input: quantity or amount
+- side: buy, sell, modify, or cancel
+- symbol for create orders
+- order ID for modify/cancel
+- exactly one size input for create orders: quantity or amount
 - order type: limit or market
 - price when required by order type
 - `clientOrderId` decision for create orders
 - high-value acknowledgement decision if relevant
 - explicit `--confirm` intent
 
-Even then, prefer this flow:
+Prefer this flow even after all details are present:
 
 1. Run the equivalent `--dry-run` command.
-2. Show the method/path/body only.
+2. Show method, path, account header presence, and body shape only.
 3. Ask the user to inspect the dry-run output.
 4. Prefer asking the user to run the final live command locally.
 
 ## Order Contract
 
 - `--dry-run` takes precedence over `--confirm`.
-- `--confirm` gates live create/modify/cancel.
+- `--confirm` gates live buy/sell/modify/cancel commands.
 - `--confirm-high-value-order` maps to Toss `confirmHighValueOrder`; it is not a live-order confirmation substitute.
 - `--client-order-id` maps to Toss `clientOrderId`; do not auto-generate it.
-- Create order must include exactly one of `--qty` or `--amount`.
+- Create orders must include exactly one of `--qty` or `--amount`.
 - `--amount` is for amount-based orders; Toss docs state it is US market and regular-hours constrained.
+- No documented sandbox/staging support is assumed; live order traffic is treated as production.
 
-## Development Verification
+## Safe Reporting
 
-Before claiming development work complete, run:
+When reporting command results:
 
-```bash
-cargo fmt --all --manifest-path rust/Cargo.toml
-cargo test --manifest-path rust/Cargo.toml
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss
-```
-
-For install verification:
-
-```bash
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss --release
-mkdir -p ~/.local/bin
-install -m 755 rust/target/release/toss ~/.local/bin/toss
-~/.local/bin/toss --json config
-~/.local/bin/toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
-```
+- State whether the command succeeded or failed.
+- Name the output envelope shape for JSON commands.
+- Avoid account numbers, balances, holdings, order IDs, and raw payloads unless the user explicitly asks for exact values.
+- Never include token values, `client_secret`, or token cache contents.
