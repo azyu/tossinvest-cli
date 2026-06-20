@@ -10,7 +10,7 @@
 
 ## Features
 
-- Read-only commands for prices, quotes, charts, stocks, markets, accounts, and holdings
+- Read-only commands for prices, quotes, charts, stocks, markets, account listing, and holdings
 - Order commands with dry-run output and explicit `--confirm` safety gates
 - Human-friendly text output plus stable JSON output for automation
 - Config file with environment overrides
@@ -87,7 +87,7 @@ toss account list
 toss account use 1
 ```
 
-`account_seq` is optional until account-bound commands are used.
+`account_seq` is optional until account-bound commands are used. `toss account use` writes the selected sequence to the local config file. Use `--account <seq>` for one-off overrides.
 
 ### 3. Run common read-only commands
 
@@ -110,20 +110,29 @@ toss holdings
 
 ### 4. Check order safety
 
-Dry-run order commands print the request shape and do not send a live order:
+Read-only order/account info commands call Toss APIs but do not create, modify, or cancel orders:
 
 ```bash
 toss --json order buying-power --currency USD
+toss --json order sellable-quantity --symbol AAPL
+toss --json order commissions
+toss --json order list --status open
+toss --json order show <orderId>
+```
+
+Dry-run mutating order commands print the request shape and do not send a live order:
+
+```bash
 toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
 ```
 
-Live mutating order commands require `--confirm`:
+Live mutating order commands require `--confirm`. Treat these as templates, not examples to run as-is:
 
 ```bash
-toss order buy --symbol AAPL --qty 1 --type limit --price 180 --client-order-id client-123 --confirm
-toss order sell --symbol AAPL --qty 1 --type market --confirm
-toss order modify ORD-123 --qty 2 --type limit --price 181 --confirm --confirm-high-value-order
-toss order cancel ORD-123 --confirm
+toss order buy --symbol <SYMBOL> --qty <QTY> --type limit --price <PRICE> --client-order-id <CLIENT_ORDER_ID> --confirm
+toss order sell --symbol <SYMBOL> --qty <QTY> --type market --confirm
+toss order modify <ORDER_ID> --qty <QTY> --type limit --price <PRICE> --confirm --confirm-high-value-order
+toss order cancel <ORDER_ID> --confirm
 ```
 
 > [!CAUTION]
@@ -144,6 +153,10 @@ toss order cancel ORD-123 --confirm
 | `toss holdings` | account holdings |
 | `toss order` | `buy`, `sell`, `modify`, `cancel`, `list`, `show`, `buying-power`, `sellable-quantity`, `commissions` |
 | `toss --version` / `toss -V` | build metadata |
+
+> [!NOTE]
+> `toss account use <seq>` updates the local config file. Use `--account <seq>` for a one-off account override.
+> `toss order list` requires `--status open|closed`; `toss order show` requires an order ID; `toss order sellable-quantity` requires `--symbol`.
 
 ## Configuration and Auth
 

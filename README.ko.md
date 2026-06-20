@@ -10,7 +10,7 @@
 
 ## 특징
 
-- 현재가, 호가, 차트, 종목, 시장, 계좌, 보유잔고 조회 명령 제공
+- 현재가, 호가, 차트, 종목, 시장, 계좌 목록, 보유잔고 조회 명령 제공
 - 주문 명령은 dry-run 출력과 명시적 `--confirm` 안전장치 제공
 - 사람용 text 출력과 자동화용 안정적인 JSON 출력 지원
 - config file과 environment override 지원
@@ -87,7 +87,7 @@ toss account list
 toss account use 1
 ```
 
-`account_seq`는 계좌가 필요한 명령을 사용하기 전까지는 선택 사항입니다.
+`account_seq`는 계좌가 필요한 명령을 사용하기 전까지는 선택 사항입니다. `toss account use`는 선택한 계좌 sequence를 로컬 config file에 저장합니다. 일회성 override에는 `--account <seq>`를 사용하세요.
 
 ### 3. 자주 쓰는 조회 명령 실행
 
@@ -110,20 +110,29 @@ toss holdings
 
 ### 4. 주문 안전장치 확인
 
-Dry-run 주문 명령은 요청 형태를 출력하고 실주문을 보내지 않습니다.
+읽기 전용 주문/계좌 정보 명령은 Toss API를 호출하지만 주문을 생성, 정정, 취소하지 않습니다.
 
 ```bash
 toss --json order buying-power --currency USD
+toss --json order sellable-quantity --symbol AAPL
+toss --json order commissions
+toss --json order list --status open
+toss --json order show <orderId>
+```
+
+Dry-run 변경 주문 명령은 요청 형태를 출력하고 실주문을 보내지 않습니다.
+
+```bash
 toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
 ```
 
-실제 변경 주문 명령은 `--confirm`이 필요합니다.
+실제 변경 주문 명령은 `--confirm`이 필요합니다. 아래 명령은 그대로 실행하는 예시가 아니라 template로만 취급하세요.
 
 ```bash
-toss order buy --symbol AAPL --qty 1 --type limit --price 180 --client-order-id client-123 --confirm
-toss order sell --symbol AAPL --qty 1 --type market --confirm
-toss order modify ORD-123 --qty 2 --type limit --price 181 --confirm --confirm-high-value-order
-toss order cancel ORD-123 --confirm
+toss order buy --symbol <SYMBOL> --qty <QTY> --type limit --price <PRICE> --client-order-id <CLIENT_ORDER_ID> --confirm
+toss order sell --symbol <SYMBOL> --qty <QTY> --type market --confirm
+toss order modify <ORDER_ID> --qty <QTY> --type limit --price <PRICE> --confirm --confirm-high-value-order
+toss order cancel <ORDER_ID> --confirm
 ```
 
 > [!CAUTION]
@@ -144,6 +153,10 @@ toss order cancel ORD-123 --confirm
 | `toss holdings` | 계좌 보유잔고 |
 | `toss order` | `buy`, `sell`, `modify`, `cancel`, `list`, `show`, `buying-power`, `sellable-quantity`, `commissions` |
 | `toss --version` / `toss -V` | build metadata 출력 |
+
+> [!NOTE]
+> `toss account use <seq>`는 로컬 config file을 업데이트합니다. 일회성 계좌 override에는 `--account <seq>`를 사용하세요.
+> `toss order list`에는 `--status open|closed`가 필요하고, `toss order show`에는 order ID가 필요하며, `toss order sellable-quantity`에는 `--symbol`이 필요합니다.
 
 ## 설정과 인증
 
