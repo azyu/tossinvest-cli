@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+[한국어 README](README.ko.md)
+
 > A small, agent-friendly Toss Securities Open API CLI built in Rust.
 
 `toss` wraps the [Toss Securities Open API](https://developers.tossinvest.com/docs) with stable JSON envelopes, human-readable text output, and explicit safety gates for order commands.
@@ -43,7 +45,7 @@ toss --version
 Example output:
 
 ```text
-toss version 0.1.0+<commit>
+toss version 0.0.1+<commit>
 commit: <commit>
 built: <UTC timestamp>
 ```
