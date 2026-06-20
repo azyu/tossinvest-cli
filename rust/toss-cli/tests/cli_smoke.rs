@@ -57,6 +57,43 @@ fn prints_bb_style_version() {
 }
 
 #[test]
+fn help_output_describes_commands_and_safety_flags() {
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("price     Current price for one or more stock symbols"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("order     Read order info and perform gated order actions"),
+        "{stdout}"
+    );
+
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args(["order", "buy", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("Do not submit; print the request shape only"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Explicitly allow a live brokerage order"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Client-supplied idempotency key"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn parses_json_price_command() {
     let cli = Cli::parse_from(["toss", "--json", "price", "005930"]);
     assert_eq!(cli.output_format(), OutputFormat::Json);

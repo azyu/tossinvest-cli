@@ -1,7 +1,14 @@
 ---
 name: tossinvest-cli
-description: This skill should be used when the user asks to "use toss", "run toss", "install toss", "configure Toss Securities credentials", "check Toss API auth", "list Toss accounts", "check Toss holdings", "query Toss prices", "run a toss order dry-run", or asks how to use the `toss` CLI for Toss Securities Open API tasks. It is for CLI usage, credential setup, safe read-only checks, JSON output handling, and order safety workflows; it is not for developing the Rust codebase.
+description: "Use when the user asks to use, install, configure, verify, or automate the `toss` CLI for Toss Securities Open API tasks: auth checks, account selection, holdings, market data, safe JSON parsing, dry-run orders, and live-order safety gates. This skill is for CLI operation and safety workflows, not Rust codebase development."
 version: 0.1.0
+author: Hermes Agent
+license: MIT
+platforms: [linux, macos, windows]
+metadata:
+  hermes:
+    tags: [toss, tossinvest, brokerage, finance, cli, json, orders]
+    related_skills: []
 ---
 
 # Toss CLI Usage Skill
@@ -27,6 +34,8 @@ Check whether `toss` is available:
 
 ```bash
 toss --version
+toss --help
+toss --json config
 ```
 
 If missing and Homebrew is available, install from the tap:
@@ -108,9 +117,12 @@ Use text output for human inspection:
 
 ```bash
 toss price AAPL
+toss price AAPL --symbols AAPL,MSFT
 toss quote orderbook AAPL
 toss quote trades AAPL
+toss quote limits AAPL
 toss chart candles AAPL --interval 1d
+toss chart candles AAPL --interval 1m --from <FROM> --to <TO>
 
 toss stock get AAPL
 toss stock warnings 005930
@@ -123,12 +135,13 @@ toss market calendar us
 toss holdings
 ```
 
-Use JSON output for automation:
+Use JSON output for automation and `--quiet` to reduce extra text in text mode:
 
 ```bash
 toss --json price AAPL
 toss --json holdings
 toss --output json order list --status open
+toss --quiet price AAPL
 ```
 
 ## JSON Output Handling
@@ -145,7 +158,7 @@ Error JSON output uses this envelope:
 {"ok":false,"command":"price","error":{"kind":"api","message":"..."}}
 ```
 
-In JSON mode, both success and error envelopes go to stdout. In text mode, human output goes to stdout and errors go to stderr.
+In JSON mode, both success and error envelopes go to stdout. Failed JSON commands can still exit non-zero, so automation should check both the process status and the parsed envelope. In text mode, human output goes to stdout and errors go to stderr. Preserve `error.requestId` for debugging when present, but do not mix it with account or token data in public summaries.
 
 ## Order Safety Workflow
 
@@ -164,6 +177,7 @@ Before any live order, require all of these details in the current conversation:
 - symbol for create orders
 - order ID for modify/cancel
 - exactly one size input for create orders: `--qty` or `--amount`
+- if using `--amount`, remember Toss docs constrain amount-based orders to US-market regular-hours cases
 - order type: limit or market
 - price when required by the order type
 - account/accountSeq to use
@@ -180,7 +194,7 @@ toss order modify <ORDER_ID> --qty <QTY> --type limit --price <PRICE> --confirm 
 toss order cancel <ORDER_ID> --confirm
 ```
 
-Never treat `--confirm-high-value-order` as a substitute for `--confirm`.
+Never treat `--confirm-high-value-order` as a substitute for `--confirm`. Do not auto-generate `--client-order-id`; ask the user whether they want to provide one for idempotency.
 
 ## Additional Resources
 

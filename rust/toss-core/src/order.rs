@@ -115,8 +115,7 @@ mod tests {
     use crate::client::TossClient;
     use crate::config::AppConfig;
     use crate::models::order::{
-        OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
-        OrderSide, OrderType, TimeInForce,
+        OrderCreateRequest, OrderModifyRequest, OrderSide, OrderType, TimeInForce,
     };
     use crate::transport::{HttpMethod, HttpRequest, HttpResponse, Transport};
 

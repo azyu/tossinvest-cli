@@ -25,6 +25,14 @@
 brew install azyu/tap/toss
 ```
 
+Verify the installed binary:
+
+```bash
+toss --version
+toss --help
+toss --json config
+```
+
 ### Prebuilt binaries
 
 Download the latest archive from [GitHub Releases](https://github.com/azyu/tossinvest-cli/releases/latest).
@@ -93,9 +101,12 @@ toss account use 1
 
 ```bash
 toss price AAPL
+toss price AAPL --symbols AAPL,MSFT
 toss quote orderbook AAPL
 toss quote trades AAPL
+toss quote limits AAPL
 toss chart candles AAPL --interval 1d
+toss chart candles AAPL --interval 1m --from <FROM> --to <TO>
 
 toss stock get AAPL
 toss stock warnings 005930
@@ -126,7 +137,7 @@ Dry-run mutating order commands print the request shape and do not send a live o
 toss --json order buy --symbol AAPL --qty 1 --type limit --price 1 --dry-run
 ```
 
-Live mutating order commands require `--confirm`. Treat these as templates, not examples to run as-is:
+Live mutating order commands require `--confirm`. The following commands are templates only. Do not copy-paste them without replacing every placeholder and understanding that confirmed commands send live brokerage traffic:
 
 ```bash
 toss order buy --symbol <SYMBOL> --qty <QTY> --type limit --price <PRICE> --client-order-id <CLIENT_ORDER_ID> --confirm
@@ -194,13 +205,14 @@ Use `--json` or `--output json` for automation.
 {"ok":false,"command":"price","error":{"kind":"api","code":"stock-not-found","message":"...","requestId":"..."}}
 ```
 
-Text output is for humans. In text mode, command errors are written to stderr. In JSON mode, success and error envelopes are written to stdout.
+Text output is for humans. Use `--quiet` to suppress extra text in text mode. In text mode, command errors are written to stderr. In JSON mode, success and error envelopes are written to stdout; failed commands can still exit non-zero, so automation should check both the JSON envelope and process status.
 
 ## Order Safety
 
 - `--dry-run` takes precedence over `--confirm`.
 - Live `buy`, `sell`, `modify`, and `cancel` require `--confirm`.
 - Create order accepts `--client-order-id`; generate your own idempotency key when needed.
+- Amount-based create orders use `--amount`; Toss docs constrain this to US-market regular-hours cases.
 - Create order must provide exactly one size field: `--qty` or `--amount`.
 - `--confirm-high-value-order` maps to Toss `confirmHighValueOrder`; it does not replace `--confirm`.
 - Prices, quantities, money values, and rates are kept as strings or JSON values, not floating-point numbers.
