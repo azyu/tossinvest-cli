@@ -134,6 +134,35 @@ fn rejects_chart_candle_count_over_openapi_limit() {
 }
 
 #[test]
+fn rejects_openapi_symbol_and_date_constraints() {
+    let err = Cli::try_parse_from(["toss", "quote", "orderbook", "AAPL*"]).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::ValueValidation);
+
+    let symbols = std::iter::repeat_n("AAPL", 201)
+        .collect::<Vec<_>>()
+        .join(",");
+    let err = Cli::try_parse_from(["toss", "price", "AAPL", "--symbols", &symbols]).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::ValueValidation);
+
+    let err = Cli::try_parse_from([
+        "toss",
+        "chart",
+        "candles",
+        "AAPL",
+        "--interval",
+        "1d",
+        "--before",
+        "not-a-date-time",
+    ])
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::ValueValidation);
+
+    let err = Cli::try_parse_from(["toss", "market", "calendar", "kr", "--date", "20260325"])
+        .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::ValueValidation);
+}
+
+#[test]
 fn emits_json_validation_error_for_missing_price_symbol() {
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
         .args(["--json", "price"])
@@ -665,6 +694,113 @@ fn emits_json_validation_error_for_order_buy_without_dry_run_or_confirm() {
     let message = envelope["error"]["message"].as_str().unwrap();
     assert!(message.contains("--dry-run"), "{message}");
     assert!(message.contains("--confirm"), "{message}");
+}
+
+#[test]
+fn emits_json_validation_error_for_order_contract_violations() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.yaml");
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\naccount_seq: 5\n",
+    )
+    .unwrap();
+
+    for args in [
+        &[
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "buy",
+            "--symbol",
+            "AAPL",
+            "--amount",
+            "100",
+            "--type",
+            "limit",
+            "--dry-run",
+        ][..],
+        &[
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "buy",
+            "--symbol",
+            "AAPL",
+            "--qty",
+            "1",
+            "--type",
+            "limit",
+            "--dry-run",
+        ][..],
+        &[
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "buy",
+            "--symbol",
+            "AAPL",
+            "--qty",
+            "1",
+            "--type",
+            "market",
+            "--price",
+            "180",
+            "--dry-run",
+        ][..],
+        &[
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "order",
+            "modify",
+            "order-123",
+            "--type",
+            "market",
+            "--price",
+            "180",
+            "--dry-run",
+        ][..],
+    ] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_json_runtime_validation_error(output, "order");
+    }
+}
+
+#[test]
+fn emits_json_validation_error_for_same_exchange_currency() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.yaml");
+    fs::write(
+        &config,
+        "client_id: client-abc\nclient_secret: secret-xyz\n",
+    )
+    .unwrap();
+
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "--json",
+            "market",
+            "exchange-rate",
+            "--base",
+            "USD",
+            "--quote",
+            "USD",
+        ])
+        .output()
+        .unwrap();
+
+    let envelope = assert_json_runtime_validation_error(output, "market");
+    let message = envelope["error"]["message"].as_str().unwrap();
+    assert!(message.contains("base and quote"), "{message}");
 }
 
 #[test]

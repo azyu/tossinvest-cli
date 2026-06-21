@@ -58,7 +58,7 @@ pub fn load(config_path: Option<&Path>, account_override: Option<&str>) -> Resul
     } else if let Ok(raw) = env::var("TOSSINVEST_ACCOUNT_SEQ") {
         Some(parse_account_seq(&raw, TossError::Config)?)
     } else {
-        file.account_seq
+        validate_account_seq(file.account_seq, TossError::Config)?
     };
 
     Ok(AppConfig {
@@ -78,23 +78,38 @@ pub fn save_config(config_path: Option<&Path>, update: ConfigUpdate) -> Result<P
         file.client_secret = Some(client_secret);
     }
     if let Some(account_seq) = update.account_seq {
-        file.account_seq = account_seq;
+        file.account_seq = validate_account_seq(account_seq, TossError::Config)?;
     }
     write_file_config(&path, &file)?;
     Ok(path)
 }
 
 pub fn save_account_seq(config_path: Option<&Path>, account_seq: u64) -> Result<PathBuf> {
+    let account_seq = validate_account_seq(Some(account_seq), TossError::Config)?;
     let path = default_config_path(config_path)?;
     let mut file = read_file_config(&path, true)?;
-    file.account_seq = Some(account_seq);
+    file.account_seq = account_seq;
     write_file_config(&path, &file)?;
     Ok(path)
 }
 
 fn parse_account_seq(raw: &str, kind: fn(String) -> TossError) -> Result<u64> {
-    raw.parse::<u64>()
-        .map_err(|_| kind(format!("invalid account sequence: {raw}")))
+    let value = raw
+        .parse::<u64>()
+        .map_err(|_| kind(format!("invalid account sequence: {raw}")))?;
+    validate_account_seq(Some(value), kind).map(|value| value.expect("validated input is Some"))
+}
+
+fn validate_account_seq(
+    account_seq: Option<u64>,
+    kind: fn(String) -> TossError,
+) -> Result<Option<u64>> {
+    if let Some(value) = account_seq
+        && value > i64::MAX as u64
+    {
+        return Err(kind(format!("invalid account sequence: {value}")));
+    }
+    Ok(account_seq)
 }
 
 fn read_file_config(path: &Path, allow_missing: bool) -> Result<FileConfig> {
@@ -269,6 +284,33 @@ client_secret: "secret-file"
         let err = load(Some(&path), Some("abc")).unwrap_err();
         assert!(
             matches!(err, TossError::Validation(ref message) if message.contains("invalid account sequence: abc")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn rejects_account_sequence_outside_openapi_int64_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        fs::write(
+            &path,
+            r#"
+client_id: "client-file"
+client_secret: "secret-file"
+account_seq: 9223372036854775808
+"#,
+        )
+        .unwrap();
+
+        let err = load(Some(&path), None).unwrap_err();
+        assert!(
+            matches!(err, TossError::Config(ref message) if message.contains("invalid account sequence")),
+            "{err}"
+        );
+
+        let err = load(Some(&path), Some("9223372036854775808")).unwrap_err();
+        assert!(
+            matches!(err, TossError::Validation(ref message) if message.contains("invalid account sequence")),
             "{err}"
         );
     }

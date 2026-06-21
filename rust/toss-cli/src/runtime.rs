@@ -116,9 +116,15 @@ async fn run_setup(
 
     let account_seq = account_override
         .map(|value| {
-            value
+            let parsed = value
                 .parse::<u64>()
-                .map_err(|_| TossError::Validation(format!("invalid account sequence: {value}")))
+                .map_err(|_| TossError::Validation(format!("invalid account sequence: {value}")))?;
+            if parsed > i64::MAX as u64 {
+                return Err(TossError::Validation(format!(
+                    "invalid account sequence: {value}"
+                )));
+            }
+            Ok(parsed)
         })
         .transpose()?;
     let saved_path = config::save_config(
@@ -224,15 +230,18 @@ async fn run_client_command<T: Transport>(
             }
         },
         cli::Command::Market(args) => match args.command {
-            cli::MarketCommand::ExchangeRate(args) => serde_json::to_value(
-                market_info::exchange_rate(
-                    client,
-                    &args.base.to_string(),
-                    &args.quote.to_string(),
-                    args.date_time.as_deref(),
-                )
-                .await?,
-            )?,
+            cli::MarketCommand::ExchangeRate(args) => {
+                validate_exchange_rate_args(&args)?;
+                serde_json::to_value(
+                    market_info::exchange_rate(
+                        client,
+                        &args.base.to_string(),
+                        &args.quote.to_string(),
+                        args.date_time.as_deref(),
+                    )
+                    .await?,
+                )?
+            }
             cli::MarketCommand::Calendar(args) => match args.command {
                 cli::CalendarCommand::Kr(args) => serde_json::to_value(
                     market_info::kr_calendar(client, args.date.as_deref()).await?,
@@ -250,7 +259,7 @@ async fn run_client_command<T: Transport>(
         },
         cli::Command::Order(args) => match args.command {
             cli::OrderCommand::Buy(args) => {
-                validate_order_create_size(&args, "buy")?;
+                validate_order_create_args(&args, "buy")?;
                 if args.dry_run {
                     let request = order::build_create_dry_run(
                         client,
@@ -274,7 +283,7 @@ async fn run_client_command<T: Transport>(
                 }
             }
             cli::OrderCommand::Sell(args) => {
-                validate_order_create_size(&args, "sell")?;
+                validate_order_create_args(&args, "sell")?;
                 if args.dry_run {
                     let request = order::build_create_dry_run(
                         client,
@@ -298,6 +307,7 @@ async fn run_client_command<T: Transport>(
                 }
             }
             cli::OrderCommand::Modify(args) => {
+                validate_order_modify_args(&args)?;
                 if args.dry_run {
                     let request = order::build_modify_dry_run(
                         client,
@@ -440,6 +450,52 @@ fn validate_order_create_size(args: &cli::OrderCreateArgs, side: &str) -> Result
         return Err(TossError::Validation(format!(
             "order {side} requires exactly one of --qty or --amount"
         ))
+        .into());
+    }
+    Ok(())
+}
+
+fn validate_order_create_args(args: &cli::OrderCreateArgs, side: &str) -> Result<()> {
+    validate_order_create_size(args, side)?;
+    validate_order_price(args.order_type, args.price.as_deref())?;
+    if args.amount.is_some() {
+        if args.order_type != cli::OrderType::Market {
+            return Err(TossError::Validation(format!(
+                "order {side} with --amount requires --type market"
+            ))
+            .into());
+        }
+        if args.time_in_force.is_some() {
+            return Err(TossError::Validation(format!(
+                "order {side} with --amount does not allow --time-in-force"
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_order_modify_args(args: &cli::OrderModifyArgs) -> Result<()> {
+    validate_order_price(args.order_type, args.price.as_deref())
+}
+
+fn validate_order_price(order_type: cli::OrderType, price: Option<&str>) -> Result<()> {
+    match (order_type, price) {
+        (cli::OrderType::Limit, None) => {
+            Err(TossError::Validation("LIMIT orders require --price".to_string()).into())
+        }
+        (cli::OrderType::Market, Some(_)) => {
+            Err(TossError::Validation("MARKET orders do not allow --price".to_string()).into())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_exchange_rate_args(args: &cli::ExchangeRateArgs) -> Result<()> {
+    if args.base == args.quote {
+        return Err(TossError::Validation(
+            "exchange-rate base and quote currencies must differ".to_string(),
+        )
         .into());
     }
     Ok(())

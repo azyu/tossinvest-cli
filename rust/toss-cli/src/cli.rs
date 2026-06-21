@@ -110,17 +110,17 @@ pub enum OrderCommand {
 
 #[derive(Debug, Args)]
 pub struct OrderCreateArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_symbol)]
     pub symbol: String,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_integer_string)]
     pub qty: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_decimal_string)]
     pub amount: Option<String>,
     #[arg(long = "type", value_enum)]
     pub order_type: OrderType,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_decimal_string)]
     pub price: Option<String>,
-    #[arg(long = "client-order-id")]
+    #[arg(long = "client-order-id", value_parser = parse_client_order_id)]
     pub client_order_id: Option<String>,
     #[arg(long)]
     pub dry_run: bool,
@@ -135,11 +135,11 @@ pub struct OrderCreateArgs {
 #[derive(Debug, Args)]
 pub struct OrderModifyArgs {
     pub order_id: String,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_integer_string)]
     pub qty: Option<String>,
     #[arg(long = "type", value_enum)]
     pub order_type: OrderType,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_decimal_string)]
     pub price: Option<String>,
     #[arg(long)]
     pub dry_run: bool,
@@ -162,11 +162,11 @@ pub struct OrderCancelArgs {
 pub struct OrderListArgs {
     #[arg(long, value_enum)]
     pub status: OrderHistoryStatus,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_symbol)]
     pub symbol: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_date)]
     pub from: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_date)]
     pub to: Option<String>,
     #[arg(long)]
     pub cursor: Option<String>,
@@ -202,7 +202,7 @@ pub struct OrderBuyingPowerArgs {
 
 #[derive(Debug, Args)]
 pub struct OrderSellableQuantityArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_symbol)]
     pub symbol: String,
 }
 
@@ -294,8 +294,9 @@ pub enum AuthCommand {
 
 #[derive(Debug, Args)]
 pub struct PriceArgs {
+    #[arg(value_parser = parse_symbol)]
     pub symbol: String,
-    #[arg(long, help = "comma-separated symbols; overrides positional symbol")]
+    #[arg(long, help = "comma-separated symbols; overrides positional symbol", value_parser = parse_symbols)]
     pub symbols: Option<String>,
 }
 
@@ -314,6 +315,7 @@ pub enum QuoteCommand {
 
 #[derive(Debug, Args)]
 pub struct TradesArgs {
+    #[arg(value_parser = parse_symbol)]
     pub symbol: String,
     #[arg(long, value_parser = clap::value_parser!(u8).range(1..=50))]
     pub count: Option<u8>,
@@ -349,12 +351,13 @@ impl std::fmt::Display for CandleInterval {
 
 #[derive(Debug, Args)]
 pub struct CandlesArgs {
+    #[arg(value_parser = parse_symbol)]
     pub symbol: String,
     #[arg(long)]
     pub interval: CandleInterval,
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=200))]
     pub count: Option<u16>,
-    #[arg(long)]
+    #[arg(long, value_parser = parse_rfc3339)]
     pub before: Option<String>,
     #[arg(long)]
     pub adjusted: Option<bool>,
@@ -391,7 +394,7 @@ pub struct ExchangeRateArgs {
     pub base: CurrencyArg,
     #[arg(long, value_enum)]
     pub quote: CurrencyArg,
-    #[arg(long = "date-time")]
+    #[arg(long = "date-time", value_parser = parse_rfc3339)]
     pub date_time: Option<String>,
 }
 
@@ -409,13 +412,13 @@ pub enum CalendarCommand {
 
 #[derive(Debug, Args)]
 pub struct CalendarDateArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_date)]
     pub date: Option<String>,
 }
 
 #[derive(Debug, Args)]
 pub struct HoldingsArgs {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_symbol)]
     pub symbol: Option<String>,
 }
 
@@ -433,16 +436,98 @@ pub enum AccountCommand {
 
 #[derive(Debug, Args)]
 pub struct AccountUseArgs {
+    #[arg(value_parser = clap::value_parser!(u64).range(0..=i64::MAX as u64))]
     pub account_seq: u64,
 }
 
 #[derive(Debug, Args)]
 pub struct SymbolArg {
+    #[arg(value_parser = parse_symbol)]
     pub symbol: String,
 }
 
 #[derive(Debug, Args)]
 pub struct SymbolsArg {
-    #[arg(long)]
+    #[arg(long, value_parser = parse_symbols)]
     pub symbols: String,
+}
+
+fn parse_symbol(value: &str) -> Result<String, String> {
+    if is_symbol(value) {
+        Ok(value.to_string())
+    } else {
+        Err("symbol must contain only letters, digits, '.', or '-'".to_string())
+    }
+}
+
+fn parse_symbols(value: &str) -> Result<String, String> {
+    let count = value.split(',').count();
+    if !(1..=200).contains(&count) {
+        return Err("symbols must contain 1 to 200 comma-separated values".to_string());
+    }
+    if value.split(',').all(is_symbol) {
+        Ok(value.to_string())
+    } else {
+        Err("symbols must contain only letters, digits, '.', '-', and commas".to_string())
+    }
+}
+
+fn is_symbol(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
+}
+
+fn parse_date(value: &str) -> Result<String, String> {
+    if chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
+        Ok(value.to_string())
+    } else {
+        Err("date must be YYYY-MM-DD".to_string())
+    }
+}
+
+fn parse_rfc3339(value: &str) -> Result<String, String> {
+    if chrono::DateTime::parse_from_rfc3339(value).is_ok() {
+        Ok(value.to_string())
+    } else {
+        Err("date-time must be RFC3339, for example 2026-03-25T09:30:00+09:00".to_string())
+    }
+}
+
+fn parse_client_order_id(value: &str) -> Result<String, String> {
+    if !value.is_empty()
+        && value.len() <= 36
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        Ok(value.to_string())
+    } else {
+        Err("client-order-id must be 1 to 36 letters, digits, '-', or '_'".to_string())
+    }
+}
+
+fn parse_integer_string(value: &str) -> Result<String, String> {
+    if !value.is_empty() && value.len() <= 30 && value.bytes().all(|byte| byte.is_ascii_digit()) {
+        Ok(value.to_string())
+    } else {
+        Err("quantity must be a 1 to 30 digit integer string".to_string())
+    }
+}
+
+fn parse_decimal_string(value: &str) -> Result<String, String> {
+    let valid = if let Some((whole, fraction)) = value.split_once('.') {
+        !whole.is_empty()
+            && !fraction.is_empty()
+            && whole.bytes().all(|byte| byte.is_ascii_digit())
+            && fraction.bytes().all(|byte| byte.is_ascii_digit())
+    } else {
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+    };
+    if valid && value.len() <= 30 {
+        Ok(value.to_string())
+    } else {
+        Err("decimal must be 1 to 30 digits with an optional fractional part".to_string())
+    }
 }

@@ -135,19 +135,19 @@ mod tests {
                 headers: Vec::new(),
                 body: serde_json::json!({
                     "result": {
-                        "totalPurchaseAmount": {"krw": "6500000", "usd": "1553"},
+                        "totalPurchaseAmount": {"krw": "6500000", "usd": null},
                         "marketValue": {
-                            "amount": {"krw": "7200000", "usd": "1785"},
-                            "amountAfterCost": {"krw": "7050000", "usd": "1771.43"}
+                            "amount": {"krw": "7200000", "usd": null},
+                            "amountAfterCost": {"krw": "7050000", "usd": null}
                         },
                         "profitLoss": {
-                            "amount": {"krw": "700000", "usd": "232"},
-                            "amountAfterCost": {"krw": "550000", "usd": "218.43"},
+                            "amount": {"krw": "700000", "usd": null},
+                            "amountAfterCost": {"krw": "550000", "usd": null},
                             "rate": "0.1179",
                             "rateAfterCost": "0.0983"
                         },
                         "dailyProfitLoss": {
-                            "amount": {"krw": "100000", "usd": "25"},
+                            "amount": {"krw": "100000", "usd": null},
                             "rate": "0.0141"
                         },
                         "items": [
@@ -192,5 +192,10 @@ mod tests {
 
         assert_eq!(holdings.items.len(), 1);
         assert_eq!(holdings.items[0].quantity, "100.5");
+        let serialized = serde_json::to_value(&holdings).unwrap();
+        assert!(serialized["totalPurchaseAmount"].get("usd").is_some());
+        assert!(serialized["totalPurchaseAmount"]["usd"].is_null());
+        assert!(serialized["items"][0]["cost"].get("tax").is_some());
+        assert!(serialized["items"][0]["cost"]["tax"].is_null());
     }
 }
