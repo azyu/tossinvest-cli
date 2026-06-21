@@ -117,6 +117,23 @@ fn rejects_invalid_chart_candle_interval() {
 }
 
 #[test]
+fn rejects_chart_candle_count_over_openapi_limit() {
+    let err = Cli::try_parse_from([
+        "toss",
+        "chart",
+        "candles",
+        "AAPL",
+        "--interval",
+        "1m",
+        "--count",
+        "201",
+    ])
+    .unwrap_err();
+
+    assert_eq!(err.kind(), ErrorKind::ValueValidation);
+}
+
+#[test]
 fn emits_json_validation_error_for_missing_price_symbol() {
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_toss"))
         .args(["--json", "price"])
@@ -621,15 +638,21 @@ fn parses_chart_candles_command() {
         "AAPL",
         "--interval",
         "1d",
-        "--from",
-        "2026-01-01",
+        "--count",
+        "200",
+        "--before",
+        "2026-06-19T18:20:00+09:00",
+        "--adjusted",
+        "false",
     ]);
     match cli.command {
         Command::Chart(args) => match args.command {
             ChartCommand::Candles(args) => {
                 assert_eq!(args.symbol, "AAPL");
                 assert_eq!(args.interval.to_string(), "1d");
-                assert_eq!(args.from.as_deref(), Some("2026-01-01"));
+                assert_eq!(args.count, Some(200));
+                assert_eq!(args.before.as_deref(), Some("2026-06-19T18:20:00+09:00"));
+                assert_eq!(args.adjusted, Some(false));
             }
         },
         other => panic!("unexpected command: {other:?}"),

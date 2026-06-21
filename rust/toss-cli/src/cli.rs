@@ -301,10 +301,12 @@ pub struct CandlesArgs {
     pub symbol: String,
     #[arg(long)]
     pub interval: CandleInterval,
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=200))]
+    pub count: Option<u16>,
     #[arg(long)]
-    pub from: Option<String>,
+    pub before: Option<String>,
     #[arg(long)]
-    pub to: Option<String>,
+    pub adjusted: Option<bool>,
 }
 
 #[derive(Debug, Args)]

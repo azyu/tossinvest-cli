@@ -1,6 +1,6 @@
 ---
 created: 2026-06-18
-updated: 2026-06-19
+updated: 2026-06-21
 ---
 # Tasks
 
@@ -60,3 +60,4 @@ Goal: order-capable CLI with dry-run and confirmation safety.
 | 2026-06-19 | GitHub Actions CI and release workflows | `.github/workflows/ci.yml`, `.github/workflows/release-build.yml`, `docs/superpowers/plans/2026-06-19-github-actions.md`; verified with YAML parse, `cargo fmt --manifest-path rust/Cargo.toml --all --check`, `cargo test --manifest-path rust/Cargo.toml`, and `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss --release`. |
 | 2026-06-19 | Homebrew tap distribution | `azyu/homebrew-tap` adds `toss.rb`, `toss.rb.template`, README entries; `tossinvest-cli` release workflow updates the tap when `HOMEBREW_TAP_TOKEN` is configured. Verified with Ruby syntax, `brew install azyu/tap/toss`, `toss --version`, `brew test azyu/tap/toss`, `actionlint`, and YAML parse. |
 | 2026-06-20 | Credential setup command | Added `toss setup` for no-echo/stdin credential setup, restrictive config writes, README/skill updates, and smoke tests. |
+| 2026-06-21 | Candle pagination CLI fix | Replaced unsupported `--from`/`--to` candle options with OpenAPI-aligned `--count`, `--before`, and `--adjusted`; verified with `cargo fmt --manifest-path rust/Cargo.toml --all`, `cargo test --manifest-path rust/Cargo.toml -p toss-cli` → 37 passed, and `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`. |

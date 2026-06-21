@@ -98,7 +98,7 @@ toss account use 1
 toss price AAPL
 toss quote orderbook AAPL
 toss quote trades AAPL
-toss chart candles AAPL --interval 1d
+toss chart candles AAPL --interval 1d --count 200
 
 toss stock get AAPL
 toss stock warnings 005930
@@ -109,6 +109,12 @@ toss market calendar kr
 toss market calendar us
 
 toss holdings
+```
+
+For candle pagination, pass the previous response's `nextBefore` as `--before`:
+
+```bash
+toss chart candles AAPL --interval 1m --count 200 --before "2026-06-19T18:20:00+09:00"
 ```
 
 ### 4. Check order safety

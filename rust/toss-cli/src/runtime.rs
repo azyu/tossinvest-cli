@@ -200,11 +200,14 @@ async fn run_client_command<T: Transport>(
                     ("symbol".to_string(), args.symbol),
                     ("interval".to_string(), args.interval.to_string()),
                 ];
-                if let Some(from) = args.from {
-                    query.push(("from".to_string(), from));
+                if let Some(count) = args.count {
+                    query.push(("count".to_string(), count.to_string()));
                 }
-                if let Some(to) = args.to {
-                    query.push(("to".to_string(), to));
+                if let Some(before) = args.before {
+                    query.push(("before".to_string(), before));
+                }
+                if let Some(adjusted) = args.adjusted {
+                    query.push(("adjusted".to_string(), adjusted.to_string()));
                 }
                 serde_json::to_value(market_data::candles(client, query).await?)?
             }
@@ -624,6 +627,18 @@ mod tests {
         })
     }
 
+    fn chart_candles_command() -> cli::Command {
+        cli::Command::Chart(cli::ChartArgs {
+            command: cli::ChartCommand::Candles(cli::CandlesArgs {
+                symbol: "AAPL".to_string(),
+                interval: cli::CandleInterval::Min1,
+                count: Some(200),
+                before: Some("2026-06-19T18:20:00+09:00".to_string()),
+                adjusted: Some(false),
+            }),
+        })
+    }
+
     fn token_response() -> HttpResponse {
         HttpResponse {
             status: 200,
@@ -800,6 +815,55 @@ mod tests {
             "nextCursor": null,
             "hasNext": false
         })
+    }
+
+    #[tokio::test]
+    async fn chart_candles_dispatches_openapi_pagination_query() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": { "candles": [] }
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "chart-candles", None);
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "chart",
+            chart_candles_command(),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
+        assert_eq!(captured[1].path, "/api/v1/candles");
+        assert_eq!(
+            captured[1].query,
+            vec![
+                ("symbol".to_string(), "AAPL".to_string()),
+                ("interval".to_string(), "1m".to_string()),
+                ("count".to_string(), "200".to_string()),
+                (
+                    "before".to_string(),
+                    "2026-06-19T18:20:00+09:00".to_string()
+                ),
+                ("adjusted".to_string(), "false".to_string())
+            ]
+        );
     }
 
     #[tokio::test]
