@@ -7,40 +7,89 @@ use crate::models::market_info::{
 };
 use crate::transport::Transport;
 
-pub async fn exchange_rate_json<T: Transport>(client: &TossClient<T>) -> Result<Value> {
+pub async fn exchange_rate_json<T: Transport>(
+    client: &TossClient<T>,
+    base_currency: &str,
+    quote_currency: &str,
+    date_time: Option<&str>,
+) -> Result<Value> {
     client
-        .get_json("/api/v1/exchange-rate", Vec::new(), false)
+        .get_json(
+            "/api/v1/exchange-rate",
+            exchange_rate_query(base_currency, quote_currency, date_time),
+            false,
+        )
         .await
 }
 
-pub async fn kr_calendar_json<T: Transport>(client: &TossClient<T>) -> Result<Value> {
+pub async fn kr_calendar_json<T: Transport>(
+    client: &TossClient<T>,
+    date: Option<&str>,
+) -> Result<Value> {
     client
-        .get_json("/api/v1/market-calendar/KR", Vec::new(), false)
+        .get_json("/api/v1/market-calendar/KR", date_query(date), false)
         .await
 }
 
-pub async fn us_calendar_json<T: Transport>(client: &TossClient<T>) -> Result<Value> {
+pub async fn us_calendar_json<T: Transport>(
+    client: &TossClient<T>,
+    date: Option<&str>,
+) -> Result<Value> {
     client
-        .get_json("/api/v1/market-calendar/US", Vec::new(), false)
+        .get_json("/api/v1/market-calendar/US", date_query(date), false)
         .await
 }
 
-pub async fn exchange_rate<T: Transport>(client: &TossClient<T>) -> Result<ExchangeRateResponse> {
+pub async fn exchange_rate<T: Transport>(
+    client: &TossClient<T>,
+    base_currency: &str,
+    quote_currency: &str,
+    date_time: Option<&str>,
+) -> Result<ExchangeRateResponse> {
     client
-        .get_typed("/api/v1/exchange-rate", Vec::new(), false)
+        .get_typed(
+            "/api/v1/exchange-rate",
+            exchange_rate_query(base_currency, quote_currency, date_time),
+            false,
+        )
         .await
 }
 
-pub async fn kr_calendar<T: Transport>(client: &TossClient<T>) -> Result<KrMarketCalendarResponse> {
+fn exchange_rate_query(
+    base_currency: &str,
+    quote_currency: &str,
+    date_time: Option<&str>,
+) -> Vec<(String, String)> {
+    let mut query = vec![
+        ("baseCurrency".to_string(), base_currency.to_string()),
+        ("quoteCurrency".to_string(), quote_currency.to_string()),
+    ];
+    if let Some(date_time) = date_time {
+        query.push(("dateTime".to_string(), date_time.to_string()));
+    }
+    query
+}
+
+pub async fn kr_calendar<T: Transport>(
+    client: &TossClient<T>,
+    date: Option<&str>,
+) -> Result<KrMarketCalendarResponse> {
     client
-        .get_typed("/api/v1/market-calendar/KR", Vec::new(), false)
+        .get_typed("/api/v1/market-calendar/KR", date_query(date), false)
         .await
 }
 
-pub async fn us_calendar<T: Transport>(client: &TossClient<T>) -> Result<UsMarketCalendarResponse> {
+pub async fn us_calendar<T: Transport>(
+    client: &TossClient<T>,
+    date: Option<&str>,
+) -> Result<UsMarketCalendarResponse> {
     client
-        .get_typed("/api/v1/market-calendar/US", Vec::new(), false)
+        .get_typed("/api/v1/market-calendar/US", date_query(date), false)
         .await
+}
+fn date_query(date: Option<&str>) -> Vec<(String, String)> {
+    date.map(|date| vec![("date".to_string(), date.to_string())])
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -131,14 +180,31 @@ mod tests {
         ]));
         let client = client(requests.clone(), responses);
 
-        exchange_rate_json(&client).await.unwrap();
-        kr_calendar_json(&client).await.unwrap();
-        us_calendar_json(&client).await.unwrap();
+        exchange_rate_json(&client, "USD", "KRW", Some("2026-03-25T09:30:00+09:00"))
+            .await
+            .unwrap();
+        kr_calendar_json(&client, Some("2026-03-25")).await.unwrap();
+        us_calendar_json(&client, Some("2026-03-25")).await.unwrap();
 
         let captured = requests.lock();
         assert_eq!(captured.len(), 4);
         assert_eq!(captured[1].path, "/api/v1/exchange-rate");
+        assert_eq!(
+            captured[1].query,
+            vec![
+                ("baseCurrency".to_string(), "USD".to_string()),
+                ("quoteCurrency".to_string(), "KRW".to_string()),
+                (
+                    "dateTime".to_string(),
+                    "2026-03-25T09:30:00+09:00".to_string()
+                )
+            ]
+        );
         assert_eq!(captured[2].path, "/api/v1/market-calendar/KR");
+        assert_eq!(
+            captured[2].query,
+            vec![("date".to_string(), "2026-03-25".to_string())]
+        );
         assert_eq!(captured[3].path, "/api/v1/market-calendar/US");
     }
 
@@ -217,9 +283,10 @@ mod tests {
         ]));
         let client = client(requests, responses);
 
-        let exchange_rate: ExchangeRateResponse = exchange_rate(&client).await.unwrap();
-        let kr_calendar: KrMarketCalendarResponse = kr_calendar(&client).await.unwrap();
-        let us_calendar: UsMarketCalendarResponse = us_calendar(&client).await.unwrap();
+        let exchange_rate: ExchangeRateResponse =
+            exchange_rate(&client, "USD", "KRW", None).await.unwrap();
+        let kr_calendar: KrMarketCalendarResponse = kr_calendar(&client, None).await.unwrap();
+        let us_calendar: UsMarketCalendarResponse = us_calendar(&client, None).await.unwrap();
 
         assert_eq!(exchange_rate.rate, "1380.5");
         assert_eq!(exchange_rate.mid_rate, "1375");

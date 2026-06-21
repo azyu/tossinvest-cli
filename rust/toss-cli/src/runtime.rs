@@ -188,7 +188,7 @@ async fn run_client_command<T: Transport>(
                 serde_json::to_value(market_data::orderbook(client, &arg.symbol).await?)?
             }
             cli::QuoteCommand::Trades(arg) => {
-                serde_json::to_value(market_data::trades(client, &arg.symbol).await?)?
+                serde_json::to_value(market_data::trades(client, &arg.symbol, arg.count).await?)?
             }
             cli::QuoteCommand::Limits(arg) => {
                 serde_json::to_value(market_data::price_limits(client, &arg.symbol).await?)?
@@ -224,16 +224,22 @@ async fn run_client_command<T: Transport>(
             }
         },
         cli::Command::Market(args) => match args.command {
-            cli::MarketCommand::ExchangeRate => {
-                serde_json::to_value(market_info::exchange_rate(client).await?)?
-            }
+            cli::MarketCommand::ExchangeRate(args) => serde_json::to_value(
+                market_info::exchange_rate(
+                    client,
+                    &args.base.to_string(),
+                    &args.quote.to_string(),
+                    args.date_time.as_deref(),
+                )
+                .await?,
+            )?,
             cli::MarketCommand::Calendar(args) => match args.command {
-                cli::CalendarCommand::Kr => {
-                    serde_json::to_value(market_info::kr_calendar(client).await?)?
-                }
-                cli::CalendarCommand::Us => {
-                    serde_json::to_value(market_info::us_calendar(client).await?)?
-                }
+                cli::CalendarCommand::Kr(args) => serde_json::to_value(
+                    market_info::kr_calendar(client, args.date.as_deref()).await?,
+                )?,
+                cli::CalendarCommand::Us(args) => serde_json::to_value(
+                    market_info::us_calendar(client, args.date.as_deref()).await?,
+                )?,
             },
         },
         cli::Command::Account(args) => match args.command {
@@ -326,18 +332,30 @@ async fn run_client_command<T: Transport>(
                 }
             }
             cli::OrderCommand::List(args) => {
-                let status = match args.status {
-                    cli::OrderHistoryStatus::Open => "OPEN",
-                    cli::OrderHistoryStatus::Closed => "CLOSED",
-                };
-                serde_json::to_value(order::list(client, status).await?)?
+                let mut query = vec![("status".to_string(), args.status.to_string())];
+                if let Some(symbol) = args.symbol {
+                    query.push(("symbol".to_string(), symbol));
+                }
+                if let Some(from) = args.from {
+                    query.push(("from".to_string(), from));
+                }
+                if let Some(to) = args.to {
+                    query.push(("to".to_string(), to));
+                }
+                if let Some(cursor) = args.cursor {
+                    query.push(("cursor".to_string(), cursor));
+                }
+                if let Some(limit) = args.limit {
+                    query.push(("limit".to_string(), limit.to_string()));
+                }
+                serde_json::to_value(order::list(client, query).await?)?
             }
             cli::OrderCommand::Show(args) => {
                 serde_json::to_value(order::show(client, &args.order_id).await?)?
             }
-            cli::OrderCommand::BuyingPower(args) => {
-                serde_json::to_value(order_info::buying_power(client, &args.currency).await?)?
-            }
+            cli::OrderCommand::BuyingPower(args) => serde_json::to_value(
+                order_info::buying_power(client, &args.currency.to_string()).await?,
+            )?,
             cli::OrderCommand::SellableQuantity(args) => {
                 serde_json::to_value(order_info::sellable_quantity(client, &args.symbol).await?)?
             }
@@ -345,7 +363,9 @@ async fn run_client_command<T: Transport>(
                 serde_json::to_value(order_info::commissions(client).await?)?
             }
         },
-        cli::Command::Holdings => serde_json::to_value(asset::holdings(client).await?)?,
+        cli::Command::Holdings(args) => {
+            serde_json::to_value(asset::holdings(client, args.symbol.as_deref()).await?)?
+        }
         cli::Command::Config => unreachable!("config is handled before client dispatch"),
         cli::Command::Setup(_) => unreachable!("setup is handled before client dispatch"),
     };
@@ -365,11 +385,14 @@ fn build_order_create_request(
         symbol: args.symbol.clone(),
         side,
         order_type,
-        time_in_force: None,
-        quantity: args.qty.as_ref().map(|value| json!(value)),
-        price: args.price.as_ref().map(|value| json!(value)),
+        time_in_force: args.time_in_force.map(|value| match value {
+            cli::TimeInForceArg::Day => toss_core::TimeInForce::DAY,
+            cli::TimeInForceArg::Cls => toss_core::TimeInForce::CLS,
+        }),
+        quantity: args.qty.clone(),
+        price: args.price.clone(),
         confirm_high_value_order: args.confirm_high_value_order.then_some(true),
-        order_amount: args.amount.as_ref().map(|value| json!(value)),
+        order_amount: args.amount.clone(),
     }
 }
 
@@ -380,8 +403,8 @@ fn build_order_modify_request(args: &cli::OrderModifyArgs) -> OrderModifyRequest
     };
     OrderModifyRequest {
         order_type,
-        quantity: args.qty.as_ref().map(|value| json!(value)),
-        price: args.price.as_ref().map(|value| json!(value)),
+        quantity: args.qty.clone(),
+        price: args.price.clone(),
         confirm_high_value_order: args.confirm_high_value_order.then_some(true),
     }
 }
@@ -486,6 +509,18 @@ fn run_config(
         "account_seq": app_config.account_seq,
     });
     write_output(output_format, command, data, writer)
+}
+
+fn mask_client_id(client_id: &str) -> String {
+    if client_id.len() <= 8 {
+        return "****".to_string();
+    }
+
+    format!(
+        "{}****{}",
+        &client_id[..4],
+        &client_id[client_id.len() - 4..]
+    )
 }
 
 pub fn write_json_error(writer: &mut dyn Write, command: &str, err: &anyhow::Error) -> Result<()> {
@@ -639,6 +674,16 @@ mod tests {
         })
     }
 
+    fn exchange_rate_command() -> cli::Command {
+        cli::Command::Market(cli::MarketArgs {
+            command: cli::MarketCommand::ExchangeRate(cli::ExchangeRateArgs {
+                base: cli::CurrencyArg::Usd,
+                quote: cli::CurrencyArg::Krw,
+                date_time: Some("2026-03-25T09:30:00+09:00".to_string()),
+            }),
+        })
+    }
+
     fn token_response() -> HttpResponse {
         HttpResponse {
             status: 200,
@@ -692,6 +737,7 @@ mod tests {
                 dry_run,
                 confirm,
                 confirm_high_value_order: true,
+                time_in_force: None,
             }),
         })
     }
@@ -723,7 +769,7 @@ mod tests {
     fn order_buying_power_command() -> cli::Command {
         cli::Command::Order(cli::OrderArgs {
             command: cli::OrderCommand::BuyingPower(cli::OrderBuyingPowerArgs {
-                currency: "USD".to_string(),
+                currency: cli::CurrencyArg::Usd,
             }),
         })
     }
@@ -758,6 +804,7 @@ mod tests {
             dry_run,
             confirm,
             confirm_high_value_order: true,
+            time_in_force: None,
         };
         cli::Command::Order(cli::OrderArgs {
             command: match side {
@@ -770,7 +817,12 @@ mod tests {
     fn order_list_command() -> cli::Command {
         cli::Command::Order(cli::OrderArgs {
             command: cli::OrderCommand::List(cli::OrderListArgs {
-                status: cli::OrderHistoryStatus::Open,
+                status: cli::OrderHistoryStatus::Closed,
+                symbol: Some("AAPL".to_string()),
+                from: Some("2026-03-01".to_string()),
+                to: Some("2026-03-31".to_string()),
+                cursor: Some("next-1".to_string()),
+                limit: Some(100),
             }),
         })
     }
@@ -867,6 +919,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn exchange_rate_dispatches_required_currency_query() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let responses = Arc::new(Mutex::new(vec![
+            token_response(),
+            HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&json!({
+                    "result": {
+                        "baseCurrency": "USD",
+                        "quoteCurrency": "KRW",
+                        "rate": "1380.5",
+                        "midRate": "1375",
+                        "basisPoint": "40",
+                        "rateChangeType": "UP",
+                        "validFrom": "2026-03-25T09:30:00+09:00",
+                        "validUntil": "2026-03-25T09:31:00+09:00"
+                    }
+                }))
+                .unwrap(),
+            },
+        ]));
+        let client = order_client(requests.clone(), responses, "exchange-rate", None);
+
+        let mut buffer = Vec::new();
+        run_client_command(
+            OutputFormat::Json,
+            "market",
+            exchange_rate_command(),
+            &client,
+            &mut buffer,
+        )
+        .await
+        .unwrap();
+
+        let envelope: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+        assert_eq!(envelope["ok"], true);
+
+        let captured = requests.lock().unwrap();
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[1].method, toss_core::transport::HttpMethod::Get);
+        assert_eq!(captured[1].path, "/api/v1/exchange-rate");
+        assert_eq!(
+            captured[1].query,
+            vec![
+                ("baseCurrency".to_string(), "USD".to_string()),
+                ("quoteCurrency".to_string(), "KRW".to_string()),
+                (
+                    "dateTime".to_string(),
+                    "2026-03-25T09:30:00+09:00".to_string()
+                )
+            ]
+        );
+    }
+
+    #[tokio::test]
     async fn order_list_dispatches_through_wrapper() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(vec![
@@ -904,7 +1012,14 @@ mod tests {
         assert_eq!(captured[1].path, "/api/v1/orders");
         assert_eq!(
             captured[1].query,
-            vec![("status".to_string(), "OPEN".to_string())]
+            vec![
+                ("status".to_string(), "CLOSED".to_string()),
+                ("symbol".to_string(), "AAPL".to_string()),
+                ("from".to_string(), "2026-03-01".to_string()),
+                ("to".to_string(), "2026-03-31".to_string()),
+                ("cursor".to_string(), "next-1".to_string()),
+                ("limit".to_string(), "100".to_string())
+            ]
         );
         assert_eq!(
             captured[1]
@@ -1024,6 +1139,7 @@ mod tests {
                 dry_run: true,
                 confirm: false,
                 confirm_high_value_order: false,
+                time_in_force: None,
             },
             super::CoreOrderSide::BUY,
         );
@@ -1493,16 +1609,4 @@ mod tests {
 
         assert!(err.to_string().contains("missing field"), "{err}");
     }
-}
-
-fn mask_client_id(client_id: &str) -> String {
-    if client_id.len() <= 8 {
-        return "****".to_string();
-    }
-
-    format!(
-        "{}****{}",
-        &client_id[..4],
-        &client_id[client_id.len() - 4..]
-    )
 }

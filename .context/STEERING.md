@@ -26,6 +26,11 @@ File-based coordination.
 - JSON mode must use stable success/error envelopes for automation.
 - Network-dependent behavior must be testable through a mock transport.
 
+
+## Definition of Done
+
+- After every feature implementation, run format, lint/check, and build commands appropriate to the changed area.
+- When a CLI behavior can be exercised without live mutation, run a dry-run or smoke command when practical and record the observed result.
 ## CLI UX Direction
 
 Global flags:

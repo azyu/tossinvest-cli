@@ -4,7 +4,7 @@ use crate::Result;
 use crate::client::TossClient;
 use crate::models::order::{
     OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
-    OrderResponse,
+    OrderOperationResponse, OrderResponse,
 };
 use crate::transport::{HttpRequest, Transport};
 
@@ -22,13 +22,16 @@ pub async fn modify<T: Transport>(
     client: &TossClient<T>,
     order_id: &str,
     request: &OrderModifyRequest,
-) -> Result<OrderResponse> {
+) -> Result<OrderOperationResponse> {
     client
         .post_typed(&format!("/api/v1/orders/{order_id}/modify"), request, true)
         .await
 }
 
-pub async fn cancel<T: Transport>(client: &TossClient<T>, order_id: &str) -> Result<OrderResponse> {
+pub async fn cancel<T: Transport>(
+    client: &TossClient<T>,
+    order_id: &str,
+) -> Result<OrderOperationResponse> {
     client
         .post_typed(
             &format!("/api/v1/orders/{order_id}/cancel"),
@@ -40,15 +43,9 @@ pub async fn cancel<T: Transport>(client: &TossClient<T>, order_id: &str) -> Res
 
 pub async fn list<T: Transport>(
     client: &TossClient<T>,
-    status: &str,
+    query: Vec<(String, String)>,
 ) -> Result<OrderHistoryListResponse> {
-    client
-        .get_typed(
-            "/api/v1/orders",
-            vec![("status".to_string(), status.to_string())],
-            true,
-        )
-        .await
+    client.get_typed("/api/v1/orders", query, true).await
 }
 
 pub async fn show<T: Transport>(
@@ -115,8 +112,7 @@ mod tests {
     use crate::client::TossClient;
     use crate::config::AppConfig;
     use crate::models::order::{
-        OrderCreateRequest, OrderHistoryListResponse, OrderHistoryOrder, OrderModifyRequest,
-        OrderSide, OrderType, TimeInForce,
+        OrderCreateRequest, OrderModifyRequest, OrderSide, OrderType, TimeInForce,
     };
     use crate::transport::{HttpMethod, HttpRequest, HttpResponse, Transport};
 
@@ -227,8 +223,8 @@ mod tests {
             side: OrderSide::BUY,
             order_type: OrderType::LIMIT,
             time_in_force: Some(TimeInForce::DAY),
-            quantity: Some(json!(10)),
-            price: Some(json!(70000)),
+            quantity: Some("10".to_string()),
+            price: Some("70000".to_string()),
             confirm_high_value_order: Some(true),
             order_amount: None,
         }
@@ -237,8 +233,8 @@ mod tests {
     fn modify_request() -> OrderModifyRequest {
         OrderModifyRequest {
             order_type: OrderType::LIMIT,
-            quantity: Some(json!(15)),
-            price: Some(json!(71000)),
+            quantity: Some("15".to_string()),
+            price: Some("71000".to_string()),
             confirm_high_value_order: Some(true),
         }
     }
@@ -272,8 +268,8 @@ mod tests {
                 "side": "BUY",
                 "orderType": "LIMIT",
                 "timeInForce": "DAY",
-                "quantity": 10,
-                "price": 70000,
+                "quantity": "10",
+                "price": "70000",
                 "confirmHighValueOrder": true
             })
         );
@@ -304,8 +300,8 @@ mod tests {
             request_body_json(request),
             json!({
                 "orderType": "LIMIT",
-                "quantity": 15,
-                "price": 71000,
+                "quantity": "15",
+                "price": "71000",
                 "confirmHighValueOrder": true
             })
         );
@@ -360,8 +356,8 @@ mod tests {
                 "side": "BUY",
                 "orderType": "LIMIT",
                 "timeInForce": "DAY",
-                "quantity": 10,
-                "price": 70000,
+                "quantity": "10",
+                "price": "70000",
                 "confirmHighValueOrder": true
             })
         );
@@ -390,8 +386,8 @@ mod tests {
             request_body_json(&request),
             json!({
                 "orderType": "LIMIT",
-                "quantity": 15,
-                "price": 71000,
+                "quantity": "15",
+                "price": "71000",
                 "confirmHighValueOrder": true
             })
         );
@@ -463,7 +459,9 @@ mod tests {
         ]));
         let client = client(requests.clone(), responses, "list-live");
 
-        let result = list(&client, "OPEN").await.expect("list orders");
+        let result = list(&client, vec![("status".to_string(), "OPEN".to_string())])
+            .await
+            .expect("list orders");
         assert_eq!(result.orders.len(), 1);
         assert_eq!(result.orders[0].order_id, "order-123");
 

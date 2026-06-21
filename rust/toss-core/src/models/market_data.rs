@@ -34,16 +34,14 @@ pub struct OrderbookResponse {
 pub struct Trade {
     pub price: MoneyValue,
     pub volume: QuantityValue,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub timestamp: String,
     pub currency: Currency,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PriceLimitResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub timestamp: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upper_limit_price: Option<MoneyValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,8 +60,7 @@ pub struct CandlePageResponse {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Candle {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<String>,
+    pub timestamp: String,
     pub open_price: MoneyValue,
     pub high_price: MoneyValue,
     pub low_price: MoneyValue,

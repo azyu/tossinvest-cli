@@ -68,7 +68,7 @@ pub enum Command {
     Market(MarketArgs),
     Account(AccountArgs),
     Order(OrderArgs),
-    Holdings,
+    Holdings(HoldingsArgs),
 }
 
 impl Command {
@@ -84,7 +84,7 @@ impl Command {
             Self::Market(_) => "market",
             Self::Account(_) => "account",
             Self::Order(_) => "order",
-            Self::Holdings => "holdings",
+            Self::Holdings(_) => "holdings",
         }
     }
 }
@@ -128,6 +128,8 @@ pub struct OrderCreateArgs {
     pub confirm: bool,
     #[arg(long = "confirm-high-value-order")]
     pub confirm_high_value_order: bool,
+    #[arg(long = "time-in-force", value_enum)]
+    pub time_in_force: Option<TimeInForceArg>,
 }
 
 #[derive(Debug, Args)]
@@ -160,6 +162,16 @@ pub struct OrderCancelArgs {
 pub struct OrderListArgs {
     #[arg(long, value_enum)]
     pub status: OrderHistoryStatus,
+    #[arg(long)]
+    pub symbol: Option<String>,
+    #[arg(long)]
+    pub from: Option<String>,
+    #[arg(long)]
+    pub to: Option<String>,
+    #[arg(long)]
+    pub cursor: Option<String>,
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
+    pub limit: Option<u16>,
 }
 
 #[derive(Debug, Args)]
@@ -184,8 +196,8 @@ impl std::fmt::Display for OrderHistoryStatus {
 
 #[derive(Debug, Args)]
 pub struct OrderBuyingPowerArgs {
-    #[arg(long)]
-    pub currency: String,
+    #[arg(long, value_enum)]
+    pub currency: CurrencyArg,
 }
 
 #[derive(Debug, Args)]
@@ -220,6 +232,38 @@ impl std::fmt::Display for OrderSide {
         f.write_str(match self {
             Self::Buy => "BUY",
             Self::Sell => "SELL",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CurrencyArg {
+    #[value(name = "KRW", alias = "krw")]
+    Krw,
+    #[value(name = "USD", alias = "usd")]
+    Usd,
+}
+
+impl std::fmt::Display for CurrencyArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Krw => "KRW",
+            Self::Usd => "USD",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum TimeInForceArg {
+    Day,
+    Cls,
+}
+
+impl std::fmt::Display for TimeInForceArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Day => "DAY",
+            Self::Cls => "CLS",
         })
     }
 }
@@ -264,8 +308,15 @@ pub struct QuoteArgs {
 #[derive(Debug, Subcommand)]
 pub enum QuoteCommand {
     Orderbook(SymbolArg),
-    Trades(SymbolArg),
+    Trades(TradesArgs),
     Limits(SymbolArg),
+}
+
+#[derive(Debug, Args)]
+pub struct TradesArgs {
+    pub symbol: String,
+    #[arg(long, value_parser = clap::value_parser!(u8).range(1..=50))]
+    pub count: Option<u8>,
 }
 
 #[derive(Debug, Args)]
@@ -330,8 +381,18 @@ pub struct MarketArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum MarketCommand {
-    ExchangeRate,
+    ExchangeRate(ExchangeRateArgs),
     Calendar(CalendarArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ExchangeRateArgs {
+    #[arg(long, value_enum)]
+    pub base: CurrencyArg,
+    #[arg(long, value_enum)]
+    pub quote: CurrencyArg,
+    #[arg(long = "date-time")]
+    pub date_time: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -342,8 +403,20 @@ pub struct CalendarArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum CalendarCommand {
-    Kr,
-    Us,
+    Kr(CalendarDateArgs),
+    Us(CalendarDateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CalendarDateArgs {
+    #[arg(long)]
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct HoldingsArgs {
+    #[arg(long)]
+    pub symbol: Option<String>,
 }
 
 #[derive(Debug, Args)]

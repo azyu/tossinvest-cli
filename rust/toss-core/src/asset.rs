@@ -5,12 +5,28 @@ use crate::client::TossClient;
 use crate::models::asset::HoldingsOverview;
 use crate::transport::Transport;
 
-pub async fn holdings_json<T: Transport>(client: &TossClient<T>) -> Result<Value> {
-    client.get_json("/api/v1/holdings", Vec::new(), true).await
+pub async fn holdings_json<T: Transport>(
+    client: &TossClient<T>,
+    symbol: Option<&str>,
+) -> Result<Value> {
+    client
+        .get_json("/api/v1/holdings", holdings_query(symbol), true)
+        .await
 }
 
-pub async fn holdings<T: Transport>(client: &TossClient<T>) -> Result<HoldingsOverview> {
-    client.get_typed("/api/v1/holdings", Vec::new(), true).await
+pub async fn holdings<T: Transport>(
+    client: &TossClient<T>,
+    symbol: Option<&str>,
+) -> Result<HoldingsOverview> {
+    client
+        .get_typed("/api/v1/holdings", holdings_query(symbol), true)
+        .await
+}
+
+fn holdings_query(symbol: Option<&str>) -> Vec<(String, String)> {
+    symbol
+        .map(|symbol| vec![("symbol".to_string(), symbol.to_string())])
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -19,7 +35,6 @@ mod tests {
 
     use async_trait::async_trait;
     use parking_lot::Mutex;
-    use serde_json::json;
 
     use super::{holdings, holdings_json};
     use crate::auth::TokenManager;
@@ -86,11 +101,15 @@ mod tests {
         ]));
         let client = client(requests.clone(), responses);
 
-        holdings_json(&client).await.unwrap();
+        holdings_json(&client, Some("AAPL")).await.unwrap();
 
         let captured = requests.lock();
         assert_eq!(captured.len(), 2);
         assert_eq!(captured[1].path, "/api/v1/holdings");
+        assert_eq!(
+            captured[1].query,
+            vec![("symbol".to_string(), "AAPL".to_string())]
+        );
         assert_eq!(
             captured[1]
                 .headers
@@ -169,9 +188,9 @@ mod tests {
         ]));
         let client = client(requests, responses);
 
-        let holdings: HoldingsOverview = holdings(&client).await.unwrap();
+        let holdings: HoldingsOverview = holdings(&client, None).await.unwrap();
 
         assert_eq!(holdings.items.len(), 1);
-        assert_eq!(holdings.items[0].quantity, json!("100.5"));
+        assert_eq!(holdings.items[0].quantity, "100.5");
     }
 }

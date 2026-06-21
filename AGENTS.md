@@ -78,6 +78,14 @@ Do not copy KIS-specific concepts:
 
 Before claiming completion, run the focused command for the changed area and record the observed result.
 
+Definition of Done for feature or behavior changes:
+
+- Run `cargo fmt --manifest-path rust/Cargo.toml --all`.
+- Run `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings`.
+- Run `cargo test --manifest-path rust/Cargo.toml`.
+- Run `cargo build --manifest-path rust/Cargo.toml -p toss-cli --bin toss`.
+- When a CLI path can be exercised without live mutation, run a smoke or dry-run command and record the observed result.
+
 Phase 1 final verification requires:
 
 ```bash

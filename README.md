@@ -42,9 +42,7 @@ Download the latest archive from [GitHub Releases](https://github.com/azyu/tossi
 Requires Rust 1.93+.
 
 ```bash
-cargo build --manifest-path rust/Cargo.toml -p toss-cli --release --bin toss
-mkdir -p ~/.local/bin
-install -m 755 rust/target/release/toss ~/.local/bin/toss
+./scripts/install-local.sh
 ```
 
 ## Quick Start
@@ -97,18 +95,18 @@ toss account use 1
 ```bash
 toss price AAPL
 toss quote orderbook AAPL
-toss quote trades AAPL
+toss quote trades AAPL --count 25
 toss chart candles AAPL --interval 1d --count 200
 
 toss stock get AAPL
 toss stock warnings 005930
 toss stock search --symbols 005930,AAPL
 
-toss market exchange-rate
-toss market calendar kr
-toss market calendar us
+toss market exchange-rate --base USD --quote KRW
+toss market calendar kr --date 2026-03-25
+toss market calendar us --date 2026-03-25
 
-toss holdings
+toss holdings --symbol AAPL
 ```
 
 For candle pagination, pass the previous response's `nextBefore` as `--before`:
@@ -125,7 +123,7 @@ Read-only order/account info commands call Toss APIs but do not create, modify, 
 toss --json order buying-power --currency USD
 toss --json order sellable-quantity --symbol AAPL
 toss --json order commissions
-toss --json order list --status open
+toss --json order list --status closed --symbol AAPL --limit 100
 toss --json order show <orderId>
 ```
 

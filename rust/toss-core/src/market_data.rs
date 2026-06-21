@@ -27,13 +27,13 @@ pub async fn orderbook_json<T: Transport>(client: &TossClient<T>, symbol: &str) 
         .await
 }
 
-pub async fn trades_json<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Value> {
+pub async fn trades_json<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+    count: Option<u8>,
+) -> Result<Value> {
     client
-        .get_json(
-            "/api/v1/trades",
-            vec![("symbol".to_string(), symbol.to_string())],
-            false,
-        )
+        .get_json("/api/v1/trades", trades_query(symbol, count), false)
         .await
 }
 
@@ -83,13 +83,13 @@ pub async fn orderbook<T: Transport>(
         .await
 }
 
-pub async fn trades<T: Transport>(client: &TossClient<T>, symbol: &str) -> Result<Vec<Trade>> {
+pub async fn trades<T: Transport>(
+    client: &TossClient<T>,
+    symbol: &str,
+    count: Option<u8>,
+) -> Result<Vec<Trade>> {
     client
-        .get_typed(
-            "/api/v1/trades",
-            vec![("symbol".to_string(), symbol.to_string())],
-            false,
-        )
+        .get_typed("/api/v1/trades", trades_query(symbol, count), false)
         .await
 }
 
@@ -111,6 +111,14 @@ pub async fn candles<T: Transport>(
     query: Vec<(String, String)>,
 ) -> Result<CandlePageResponse> {
     client.get_typed("/api/v1/candles", query, false).await
+}
+
+fn trades_query(symbol: &str, count: Option<u8>) -> Vec<(String, String)> {
+    let mut query = vec![("symbol".to_string(), symbol.to_string())];
+    if let Some(count) = count {
+        query.push(("count".to_string(), count.to_string()));
+    }
+    query
 }
 
 #[cfg(test)]
@@ -199,7 +207,7 @@ mod tests {
 
         let prices = prices(&client, "AAPL").await.unwrap();
         assert_eq!(prices[0].symbol, "AAPL");
-        assert_eq!(prices[0].last_price, json!("181.23"));
+        assert_eq!(prices[0].last_price, "181.23");
         assert_eq!(prices[0].currency.0, "USD");
         assert_eq!(
             prices[0].timestamp.as_deref(),
@@ -208,15 +216,15 @@ mod tests {
 
         let orderbook = orderbook(&client, "AAPL").await.unwrap();
         assert_eq!(orderbook.currency.0, "KRW");
-        assert_eq!(orderbook.asks[0].price, json!("72300"));
-        assert_eq!(orderbook.bids[0].volume, json!("5200"));
+        assert_eq!(orderbook.asks[0].price, "72300");
+        assert_eq!(orderbook.bids[0].volume, "5200");
 
-        let trades = trades(&client, "AAPL").await.unwrap();
-        assert_eq!(trades[0].price, json!("72000"));
+        let trades = trades(&client, "AAPL", None).await.unwrap();
+        assert_eq!(trades[0].price, "72000");
         assert_eq!(trades[0].currency.0, "KRW");
 
         let limits = price_limits(&client, "AAPL").await.unwrap();
-        assert_eq!(limits.upper_limit_price, Some(json!("93000")));
+        assert_eq!(limits.upper_limit_price.as_deref(), Some("93000"));
         assert_eq!(limits.currency.0, "KRW");
 
         let candles = candles(
@@ -229,7 +237,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(candles.candles.len(), 2);
-        assert_eq!(candles.candles[0].close_price, json!("72000"));
+        assert_eq!(candles.candles[0].close_price, "72000");
         assert_eq!(
             candles.next_before.as_deref(),
             Some("2026-03-25T09:00:00+09:00")
@@ -248,33 +256,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deserializes_missing_timestamps_as_none() {
-        let trade: Trade = serde_json::from_value(serde_json::json!({
+    async fn rejects_missing_required_timestamps() {
+        let trade = serde_json::from_value::<Trade>(serde_json::json!({
             "price": "72000",
             "volume": "120",
             "currency": "KRW"
-        }))
-        .unwrap();
-        assert_eq!(trade.timestamp, None);
+        }));
+        assert!(trade.unwrap_err().to_string().contains("timestamp"));
 
-        let limit: PriceLimitResponse = serde_json::from_value(serde_json::json!({
+        let limit = serde_json::from_value::<PriceLimitResponse>(serde_json::json!({
             "upperLimitPrice": "93000",
             "lowerLimitPrice": "50400",
             "currency": "KRW"
-        }))
-        .unwrap();
-        assert_eq!(limit.timestamp, None);
+        }));
+        assert!(limit.unwrap_err().to_string().contains("timestamp"));
 
-        let candle: Candle = serde_json::from_value(serde_json::json!({
+        let candle = serde_json::from_value::<Candle>(serde_json::json!({
             "openPrice": "71600",
             "highPrice": "72300",
             "lowPrice": "71500",
             "closePrice": "72000",
             "volume": "3521000",
             "currency": "KRW"
-        }))
-        .unwrap();
-        assert_eq!(candle.timestamp, None);
+        }));
+        assert!(candle.unwrap_err().to_string().contains("timestamp"));
     }
 
     #[tokio::test]
@@ -292,7 +297,7 @@ mod tests {
 
         prices_json(&client, "AAPL,MSFT").await.unwrap();
         orderbook_json(&client, "AAPL").await.unwrap();
-        trades_json(&client, "AAPL").await.unwrap();
+        trades_json(&client, "AAPL", Some(25)).await.unwrap();
         price_limits_json(&client, "AAPL").await.unwrap();
         candles_json(
             &client,
@@ -317,6 +322,13 @@ mod tests {
             vec![("symbol".to_string(), "AAPL".to_string())]
         );
         assert_eq!(captured[3].path, "/api/v1/trades");
+        assert_eq!(
+            captured[3].query,
+            vec![
+                ("symbol".to_string(), "AAPL".to_string()),
+                ("count".to_string(), "25".to_string())
+            ]
+        );
         assert_eq!(captured[4].path, "/api/v1/price-limits");
         assert_eq!(captured[5].path, "/api/v1/candles");
         assert_eq!(

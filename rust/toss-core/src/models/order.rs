@@ -38,13 +38,13 @@ pub struct OrderCreateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_in_force: Option<TimeInForce>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quantity: Option<Value>,
+    pub quantity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub price: Option<Value>,
+    pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirm_high_value_order: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub order_amount: Option<Value>,
+    pub order_amount: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -52,9 +52,9 @@ pub struct OrderCreateRequest {
 pub struct OrderModifyRequest {
     pub order_type: OrderType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quantity: Option<Value>,
+    pub quantity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub price: Option<Value>,
+    pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirm_high_value_order: Option<bool>,
 }
@@ -83,6 +83,12 @@ pub struct OrderResponse {
     pub order_amount: Option<Value>,
     #[serde(flatten, default)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderOperationResponse {
+    pub order_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -152,10 +158,10 @@ mod tests {
             side: OrderSide::BUY,
             order_type: OrderType::LIMIT,
             time_in_force: Some(TimeInForce::DAY),
-            quantity: Some(json!("1")),
-            price: Some(json!("181.23")),
+            quantity: Some("1".to_string()),
+            price: Some("181.23".to_string()),
             confirm_high_value_order: Some(true),
-            order_amount: Some(json!("181.23")),
+            order_amount: Some("181.23".to_string()),
         };
 
         assert_eq!(
@@ -178,8 +184,8 @@ mod tests {
     fn serializes_modify_request_fields_exactly() {
         let request = OrderModifyRequest {
             order_type: OrderType::MARKET,
-            quantity: Some(json!("2")),
-            price: Some(json!("180.00")),
+            quantity: Some("2".to_string()),
+            price: Some("180.00".to_string()),
             confirm_high_value_order: None,
         };
 

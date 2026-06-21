@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-pub type MoneyValue = serde_json::Value;
-pub type QuantityValue = serde_json::Value;
+pub type MoneyValue = String;
+pub type QuantityValue = String;
 pub type DateString = String;
 pub type TimestampString = String;
 

@@ -5,7 +5,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 use clap::{Parser, error::ErrorKind};
 use toss_cli::cli::{
     CalendarCommand, ChartCommand, Cli, Command, MarketCommand, OrderCommand, OrderHistoryStatus,
-    OrderType, OutputFormat, QuoteCommand, StockCommand,
+    OrderType, OutputFormat, QuoteCommand, StockCommand, TimeInForceArg,
 };
 
 fn assert_json_parse_error(output: std::process::Output, command: &str) {
@@ -178,6 +178,18 @@ fn parses_quote_orderbook_command() {
         },
         other => panic!("unexpected command: {other:?}"),
     }
+
+    let cli = Cli::parse_from(["toss", "quote", "trades", "AAPL", "--count", "25"]);
+    match cli.command {
+        Command::Quote(args) => match args.command {
+            QuoteCommand::Trades(args) => {
+                assert_eq!(args.symbol, "AAPL");
+                assert_eq!(args.count, Some(25));
+            }
+            other => panic!("unexpected quote command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
 }
 
 #[test]
@@ -185,7 +197,7 @@ fn parses_order_read_only_commands() {
     let cli = Cli::parse_from(["toss", "order", "buying-power", "--currency", "USD"]);
     match cli.command {
         Command::Order(args) => match args.command {
-            OrderCommand::BuyingPower(args) => assert_eq!(args.currency, "USD"),
+            OrderCommand::BuyingPower(args) => assert_eq!(args.currency.to_string(), "USD"),
             other => panic!("unexpected order command: {other:?}"),
         },
         other => panic!("unexpected command: {other:?}"),
@@ -212,10 +224,33 @@ fn parses_order_read_only_commands() {
 
 #[test]
 fn parses_order_history_commands() {
-    let cli = Cli::parse_from(["toss", "order", "list", "--status", "open"]);
+    let cli = Cli::parse_from([
+        "toss",
+        "order",
+        "list",
+        "--status",
+        "closed",
+        "--symbol",
+        "AAPL",
+        "--from",
+        "2026-03-01",
+        "--to",
+        "2026-03-31",
+        "--cursor",
+        "next-1",
+        "--limit",
+        "100",
+    ]);
     match cli.command {
         Command::Order(args) => match args.command {
-            OrderCommand::List(args) => assert_eq!(args.status, OrderHistoryStatus::Open),
+            OrderCommand::List(args) => {
+                assert_eq!(args.status, OrderHistoryStatus::Closed);
+                assert_eq!(args.symbol.as_deref(), Some("AAPL"));
+                assert_eq!(args.from.as_deref(), Some("2026-03-01"));
+                assert_eq!(args.to.as_deref(), Some("2026-03-31"));
+                assert_eq!(args.cursor.as_deref(), Some("next-1"));
+                assert_eq!(args.limit, Some(100));
+            }
             other => panic!("unexpected order command: {other:?}"),
         },
         other => panic!("unexpected command: {other:?}"),
@@ -236,6 +271,8 @@ fn parses_order_mutating_commands_with_safety_flags() {
         "toss",
         "order",
         "buy",
+        "--time-in-force",
+        "cls",
         "--symbol",
         "AAPL",
         "--qty",
@@ -259,6 +296,7 @@ fn parses_order_mutating_commands_with_safety_flags() {
                 assert_eq!(args.order_type, OrderType::Limit);
                 assert_eq!(args.price.as_deref(), Some("180"));
                 assert_eq!(args.client_order_id.as_deref(), Some("client-1"));
+                assert_eq!(args.time_in_force, Some(TimeInForceArg::Cls));
                 assert!(args.dry_run);
                 assert!(args.confirm);
                 assert!(args.confirm_high_value_order);
@@ -630,6 +668,15 @@ fn emits_json_validation_error_for_order_buy_without_dry_run_or_confirm() {
 }
 
 #[test]
+fn parses_holdings_symbol_filter() {
+    let cli = Cli::parse_from(["toss", "holdings", "--symbol", "AAPL"]);
+    match cli.command {
+        Command::Holdings(args) => assert_eq!(args.symbol.as_deref(), Some("AAPL")),
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
 fn parses_chart_candles_command() {
     let cli = Cli::parse_from([
         "toss",
@@ -670,11 +717,34 @@ fn parses_stock_and_market_commands() {
         other => panic!("unexpected command: {other:?}"),
     }
 
-    let market = Cli::parse_from(["toss", "market", "calendar", "kr"]);
+    let market = Cli::parse_from([
+        "toss",
+        "market",
+        "exchange-rate",
+        "--base",
+        "USD",
+        "--quote",
+        "KRW",
+        "--date-time",
+        "2026-03-25T09:30:00+09:00",
+    ]);
+    match market.command {
+        Command::Market(args) => match args.command {
+            MarketCommand::ExchangeRate(args) => {
+                assert_eq!(args.base.to_string(), "USD");
+                assert_eq!(args.quote.to_string(), "KRW");
+                assert_eq!(args.date_time.as_deref(), Some("2026-03-25T09:30:00+09:00"));
+            }
+            other => panic!("unexpected market command: {other:?}"),
+        },
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let market = Cli::parse_from(["toss", "market", "calendar", "kr", "--date", "2026-03-25"]);
     match market.command {
         Command::Market(args) => match args.command {
             MarketCommand::Calendar(args) => match args.command {
-                CalendarCommand::Kr => {}
+                CalendarCommand::Kr(args) => assert_eq!(args.date.as_deref(), Some("2026-03-25")),
                 other => panic!("unexpected calendar command: {other:?}"),
             },
             other => panic!("unexpected market command: {other:?}"),
